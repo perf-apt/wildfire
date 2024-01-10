@@ -32,21 +32,20 @@ SELECT `(a)?+.+` FROM testData2 WHERE a = 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a)?+.+`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 43,
-    "fragment" : "SELECT `(a)?+.+` FROM testData2 WHERE a = 1"
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "`(a)?+.+`"
   } ]
 }
 
@@ -56,11 +55,10 @@ SELECT t.`(a)?+.+` FROM testData2 t WHERE a = 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`t`.`(a)?+.+`",
     "proposal" : "`t`.`A`, `t`.`B`, `t`.`c`, `t`.`d`"
@@ -68,9 +66,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 47,
-    "fragment" : "SELECT t.`(a)?+.+` FROM testData2 t WHERE a = 1"
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "t.`(a)?+.+`"
   } ]
 }
 
@@ -80,21 +78,20 @@ SELECT `(a|b)` FROM testData2 WHERE a = 2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a|b)`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 41,
-    "fragment" : "SELECT `(a|b)` FROM testData2 WHERE a = 2"
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "`(a|b)`"
   } ]
 }
 
@@ -104,21 +101,20 @@ SELECT `(a|b)?+.+` FROM testData2 WHERE a = 2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a|b)?+.+`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 45,
-    "fragment" : "SELECT `(a|b)?+.+` FROM testData2 WHERE a = 2"
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "`(a|b)?+.+`"
   } ]
 }
 
@@ -128,21 +124,20 @@ SELECT SUM(`(a|b)?+.+`) FROM testData2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a|b)?+.+`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 38,
-    "fragment" : "SELECT SUM(`(a|b)?+.+`) FROM testData2"
+    "startIndex" : 12,
+    "stopIndex" : 22,
+    "fragment" : "`(a|b)?+.+`"
   } ]
 }
 
@@ -152,21 +147,20 @@ SELECT SUM(`(a)`) FROM testData2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a)`",
-    "proposal" : "`testdata2`.`A`, `testdata2`.`B`, `testdata2`.`c`, `testdata2`.`d`"
+    "proposal" : "`A`, `B`, `c`, `d`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 32,
-    "fragment" : "SELECT SUM(`(a)`) FROM testData2"
+    "startIndex" : 12,
+    "stopIndex" : 16,
+    "fragment" : "`(a)`"
   } ]
 }
 
@@ -387,21 +381,20 @@ SELECT SUM(a) FROM testdata3 GROUP BY `(a)`
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a)`",
-    "proposal" : "`testdata3`.`a`, `testdata3`.`b`"
+    "proposal" : "`a`, `b`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 30,
+    "startIndex" : 39,
     "stopIndex" : 43,
-    "fragment" : "GROUP BY `(a)`"
+    "fragment" : "`(a)`"
   } ]
 }
 
@@ -411,20 +404,19 @@ SELECT SUM(a) FROM testdata3 GROUP BY `(a)?+.+`
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`(a)?+.+`",
-    "proposal" : "`testdata3`.`a`, `testdata3`.`b`"
+    "proposal" : "`a`, `b`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 30,
+    "startIndex" : 39,
     "stopIndex" : 47,
-    "fragment" : "GROUP BY `(a)?+.+`"
+    "fragment" : "`(a)?+.+`"
   } ]
 }

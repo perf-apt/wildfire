@@ -24,7 +24,7 @@ from pyspark import pandas as ps
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class ComplexOpsTest(OpsTestBase):
+class ComplexOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series([[1, 2, 3]])
@@ -239,7 +239,7 @@ class ComplexOpsTest(OpsTestBase):
         pdf, psdf = self.array_pdf, self.array_psdf
         for col in self.array_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser, psser.to_pandas())
+            self.assert_eq(pser, psser._to_pandas())
             self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -351,12 +351,16 @@ class ComplexOpsTest(OpsTestBase):
         )
 
 
+class ComplexOpsTests(ComplexOpsTestsMixin, OpsTestBase):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.data_type_ops.test_complex_ops import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

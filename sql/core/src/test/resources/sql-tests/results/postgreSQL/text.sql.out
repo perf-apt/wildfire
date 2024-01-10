@@ -64,12 +64,12 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'four: 2'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -89,12 +89,12 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'four: 2'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BIGINT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -309,12 +309,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE",
+  "errorClass" : "INVALID_PARAMETER_VALUE.ZERO_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
-    "parameter" : "strfmt",
     "functionName" : "`format_string`",
-    "expected" : "expects %1$, %2$ and so on, but got %0$."
+    "parameter" : "`strfmt`"
   },
   "queryContext" : [ {
     "objectType" : "",

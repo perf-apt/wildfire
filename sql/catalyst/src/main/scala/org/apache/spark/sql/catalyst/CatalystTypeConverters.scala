@@ -35,6 +35,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.collection.Utils
 
 /**
  * Functions to convert Scala types to Catalyst types and vice versa.
@@ -101,7 +103,7 @@ object CatalystTypeConverters {
     final def toCatalyst(@Nullable maybeScalaValue: Any): CatalystType = {
       maybeScalaValue match {
         case null | None => null.asInstanceOf[CatalystType]
-        case opt: Some[ScalaInputType] => toCatalystImpl(opt.get)
+        case opt: Some[ScalaInputType @unchecked] => toCatalystImpl(opt.get)
         case other => toCatalystImpl(other.asInstanceOf[ScalaInputType])
       }
     }
@@ -182,13 +184,13 @@ object CatalystTypeConverters {
       if (catalystValue == null) {
         null
       } else if (isPrimitive(elementType)) {
-        catalystValue.toArray[Any](elementType)
+        catalystValue.toArray[Any](elementType).toImmutableArraySeq
       } else {
         val result = new Array[Any](catalystValue.numElements())
         catalystValue.foreach(elementType, (i, e) => {
           result(i) = elementConverter.toScala(e)
         })
-        result
+        result.toImmutableArraySeq
       }
     }
 
@@ -229,7 +231,7 @@ object CatalystTypeConverters {
         val convertedValues =
           if (isPrimitive(valueType)) values else values.map(valueConverter.toScala)
 
-        convertedKeys.zip(convertedValues).toMap
+        Utils.toMap(convertedKeys, convertedValues)
       }
     }
 

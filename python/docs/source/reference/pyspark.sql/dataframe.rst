@@ -25,6 +25,8 @@ DataFrame
 .. autosummary::
     :toctree: api/
 
+    DataFrame.__getattr__
+    DataFrame.__getitem__
     DataFrame.agg
     DataFrame.alias
     DataFrame.approxQuantile
@@ -48,6 +50,7 @@ DataFrame
     DataFrame.distinct
     DataFrame.drop
     DataFrame.dropDuplicates
+    DataFrame.dropDuplicatesWithinWatermark
     DataFrame.drop_duplicates
     DataFrame.dropna
     DataFrame.dtypes
@@ -60,6 +63,7 @@ DataFrame
     DataFrame.foreachPartition
     DataFrame.freqItems
     DataFrame.groupBy
+    DataFrame.groupingSets
     DataFrame.head
     DataFrame.hint
     DataFrame.inputFiles
@@ -76,6 +80,7 @@ DataFrame
     DataFrame.melt
     DataFrame.na
     DataFrame.observe
+    DataFrame.offset
     DataFrame.orderBy
     DataFrame.persist
     DataFrame.printSchema
@@ -108,7 +113,6 @@ DataFrame
     DataFrame.toJSON
     DataFrame.toLocalIterator
     DataFrame.toPandas
-    DataFrame.to_pandas_on_spark
     DataFrame.transform
     DataFrame.union
     DataFrame.unionAll
@@ -119,6 +123,7 @@ DataFrame
     DataFrame.withColumn
     DataFrame.withColumns
     DataFrame.withColumnRenamed
+    DataFrame.withColumnsRenamed
     DataFrame.withMetadata
     DataFrame.withWatermark
     DataFrame.write

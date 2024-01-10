@@ -50,7 +50,6 @@ class MissingPandasLikeDataFrameGroupBy:
     indices = _unsupported_property("indices")
     ngroups = _unsupported_property("ngroups")
     plot = _unsupported_property("plot")
-    tshift = _unsupported_property("tshift")
 
     # Deprecated properties
     take = _unsupported_property("take", deprecated=True)
@@ -61,7 +60,6 @@ class MissingPandasLikeDataFrameGroupBy:
     ohlc = _unsupported_function("ohlc")
     pct_change = _unsupported_function("pct_change")
     pipe = _unsupported_function("pipe")
-    prod = _unsupported_function("prod")
     resample = _unsupported_function("resample")
 
 
@@ -80,7 +78,6 @@ class MissingPandasLikeSeriesGroupBy:
     is_monotonic_increasing = _unsupported_property("is_monotonic_increasing")
     ngroups = _unsupported_property("ngroups")
     plot = _unsupported_property("plot")
-    tshift = _unsupported_property("tshift")
 
     # Deprecated properties
     take = _unsupported_property("take", deprecated=True)
@@ -93,5 +90,4 @@ class MissingPandasLikeSeriesGroupBy:
     ohlc = _unsupported_function("ohlc")
     pct_change = _unsupported_function("pct_change")
     pipe = _unsupported_function("pipe")
-    prod = _unsupported_function("prod")
     resample = _unsupported_function("resample")

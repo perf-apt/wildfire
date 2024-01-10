@@ -6,11 +6,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'GGGGG'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'GGGGG'"
   }
 }
 
@@ -22,11 +23,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'yyyyyyy'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'yyyyyyy'"
   }
 }
 
@@ -56,11 +58,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'MMMMM'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'MMMMM'"
   }
 }
 
@@ -72,11 +75,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'LLLLL'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'LLLLL'"
   }
 }
 
@@ -88,11 +92,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'EEEEE'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'EEEEE'"
   }
 }
 
@@ -104,11 +109,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'FF'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'FF'"
   }
 }
 
@@ -120,11 +126,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'ddd'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'ddd'"
   }
 }
 
@@ -136,11 +143,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'DDDD'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'DDDD'"
   }
 }
 
@@ -152,11 +160,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'HHH'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'HHH'"
   }
 }
 
@@ -168,11 +177,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'hhh'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'hhh'"
   }
 }
 
@@ -184,11 +194,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'kkk'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'kkk'"
   }
 }
 
@@ -200,11 +211,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'KKK'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'KKK'"
   }
 }
 
@@ -216,11 +228,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'mmm'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'mmm'"
   }
 }
 
@@ -232,11 +245,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'sss'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'sss'"
   }
 }
 
@@ -248,11 +262,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'SSSSSSSSSS'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'SSSSSSSSSS'"
   }
 }
 
@@ -264,11 +279,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'aa'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'aa'"
   }
 }
 
@@ -289,11 +305,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'zzzzz'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'zzzzz'"
   }
 }
 
@@ -314,11 +331,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'ZZZZZZ'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'ZZZZZZ'"
   }
 }
 
@@ -384,11 +402,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'Y'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'Y'"
   }
 }
 
@@ -400,11 +419,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'w'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'w'"
   }
 }
 
@@ -416,11 +436,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'W'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'W'"
   }
 }
 
@@ -432,11 +453,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'u'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'u'"
   }
 }
 

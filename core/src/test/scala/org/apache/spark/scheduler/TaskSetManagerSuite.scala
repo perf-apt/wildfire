@@ -38,13 +38,15 @@ import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.{SKIP_VALIDATE_CORES_TESTING, TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED}
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, Clock, ManualClock, SystemClock}
+import org.apache.spark.util.ArrayImplicits._
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
@@ -74,7 +76,7 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
     taskScheduler.taskSetsFailed += taskSet.id
   }
 
-  override def speculativeTaskSubmitted(task: Task[_]): Unit = {
+  override def speculativeTaskSubmitted(task: Task[_], taskIndex: Int): Unit = {
     taskScheduler.speculativeTasks += task.partitionId
   }
 }
@@ -184,7 +186,8 @@ class FakeTaskScheduler(
 /**
  * A Task implementation that results in a large serialized task.
  */
-class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0, 1) {
+class LargeTask(stageId: Int) extends Task[Array[Byte]](
+    stageId, 0, 0, 1, JobArtifactSet.emptyJobArtifactSet) {
 
   val randomBuffer = new Array[Byte](TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024)
   val random = new Random(0)
@@ -389,7 +392,7 @@ class TaskSetManagerSuite
     manager.isZombie = false
 
     // offers not accepted due to excludelist are not delay schedule rejects
-    val tsmSpy = spy(manager)
+    val tsmSpy = spy[TaskSetManager](manager)
     val excludelist = mock(classOf[TaskSetExcludelist])
     when(tsmSpy.taskSetExcludelistHelperOpt).thenReturn(Some(excludelist))
     when(excludelist.isNodeExcludedForTaskSet(any())).thenReturn(true)
@@ -670,6 +673,42 @@ class TaskSetManagerSuite
     assert(manager.resourceOffer("execA", "host1", ANY)._1.isDefined)
   }
 
+  test("SPARK-41469: task doesn't need to rerun on executor lost if shuffle data has migrated") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc)
+    val backend = mock(classOf[SchedulerBackend])
+    doNothing().when(backend).reviveOffers()
+    sched.initialize(backend)
+
+    sched.addExecutor("exec0", "host0")
+
+    val mapOutputTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    mapOutputTracker.registerShuffle(0, 2, 0)
+
+    val taskSet = FakeTask.createShuffleMapTaskSet(2, 0, 0,
+      Seq(TaskLocation("host0", "exec0")), Seq(TaskLocation("host1", "exec1")))
+    sched.submitTasks(taskSet)
+    val manager = sched.taskSetManagerForAttempt(0, 0).get
+
+    // Schedule task 0 and mark it as completed with shuffle map output registered
+    val taskDesc = manager.resourceOffer("exec0", "host0", PROCESS_LOCAL)._1
+    assert(taskDesc.isDefined)
+    val taskIndex = taskDesc.get.index
+    val taskId = taskDesc.get.taskId
+    manager.handleSuccessfulTask(taskId, createTaskResult(taskId.toInt))
+    mapOutputTracker.registerMapOutput(0, taskIndex,
+      MapStatus(BlockManagerId("exec0", "host0", 8848), Array(1024), taskId))
+
+    // Mock executor "exec0" decommission and migrate shuffle map output of task 0
+    manager.executorDecommission("exec0")
+    mapOutputTracker.updateMapOutput(0, taskId, BlockManagerId("exec1", "host1", 8848))
+
+    // Trigger executor "exec0" lost. Since the map output of task 0 has been migrated, it doesn't
+    // need to rerun. So task 0 should still remain in the successful status.
+    manager.executorLost("exec0", "host0", ExecutorDecommission())
+    assert(manager.successful(taskIndex))
+  }
+
   test("SPARK-32653: Decommissioned host should not be used to calculate locality levels") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc)
@@ -770,7 +809,7 @@ class TaskSetManagerSuite
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
 
     val taskSet = new TaskSet(Array(new LargeTask(0)), 0, 0, 0,
-      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     assert(!manager.emittedTaskSizeWarning)
@@ -786,7 +825,7 @@ class TaskSetManagerSuite
 
     val taskSet = new TaskSet(
       Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)),
-      0, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      0, 0, 0, null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     intercept[TaskNotSerializableException] {
@@ -799,15 +838,15 @@ class TaskSetManagerSuite
     val conf = new SparkConf().set(config.MAX_RESULT_SIZE.key, "2m")
     sc = new SparkContext("local", "test", conf)
 
-    def genBytes(size: Int): (Int) => Array[Byte] = { (x: Int) =>
+    def genBytes(size: Int): (Int) => Seq[Byte] = { (x: Int) =>
       val bytes = Array.ofDim[Byte](size)
       scala.util.Random.nextBytes(bytes)
-      bytes
+      bytes.toImmutableArraySeq
     }
 
     // multiple 1k result
     val r = sc.makeRDD(0 until 10, 10).map(genBytes(1024)).collect()
-    assert(10 === r.size)
+    assert(10 === r.length)
 
     // single 10M result
     val thrown = intercept[SparkException] {sc.makeRDD(genBytes(10 << 20)(0), 1).collect()}
@@ -825,7 +864,7 @@ class TaskSetManagerSuite
     sc = new SparkContext("local", "test", conf)
     // final result is below limit.
     val r = sc.makeRDD(0 until 2000, 2000).distinct(10).filter(_ == 0).collect()
-    assert(1 === r.size)
+    assert(1 === r.length)
   }
 
   test("[SPARK-13931] taskSetManager should not send Resubmitted tasks after being a zombie") {
@@ -864,9 +903,10 @@ class TaskSetManagerSuite
 
     val singleTask = new ShuffleMapTask(0, 0, null, new Partition {
         override def index: Int = 0
-      }, 1, Seq(TaskLocation("host1", "execA")), new Properties, null)
+      }, 1, Seq(TaskLocation("host1", "execA")),
+      JobArtifactSet.getActiveOrDefault(sc), new Properties, null)
     val taskSet = new TaskSet(Array(singleTask), 0, 0, 0,
-      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      null, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, Some(0))
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     // Offer host1, which should be accepted as a PROCESS_LOCAL location
@@ -882,7 +922,7 @@ class TaskSetManagerSuite
     assert(manager.runningTasks === 2)
     assert(manager.isZombie === false)
 
-    val directTaskResult = new DirectTaskResult[String](null, Seq(), Array()) {
+    val directTaskResult = new DirectTaskResult[String]() {
       override def value(resultSer: SerializerInstance): String = ""
     }
     // Complete one copy of the task, which should result in the task set manager
@@ -1380,7 +1420,7 @@ class TaskSetManagerSuite
     val taskSet = FakeTask.createTaskSet(4)
     val tsm = new TaskSetManager(sched, taskSet, 4)
     // we need a spy so we can attach our mock excludelist
-    val tsmSpy = spy(tsm)
+    val tsmSpy = spy[TaskSetManager](tsm)
     val excludelist = mock(classOf[TaskSetExcludelist])
     when(tsmSpy.taskSetExcludelistHelperOpt).thenReturn(Some(excludelist))
 
@@ -1461,7 +1501,7 @@ class TaskSetManagerSuite
     val mockListenerBus = mock(classOf[LiveListenerBus])
     val healthTracker = new HealthTracker(mockListenerBus, conf, None, clock)
     val taskSetManager = new TaskSetManager(sched, taskSet, 1, Some(healthTracker))
-    val taskSetManagerSpy = spy(taskSetManager)
+    val taskSetManagerSpy = spy[TaskSetManager](taskSetManager)
 
     val taskDesc = taskSetManagerSpy.resourceOffer(exec, host, TaskLocality.ANY)._1
 
@@ -1483,7 +1523,7 @@ class TaskSetManagerSuite
 
   test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {
     sc = new SparkContext("local", "test")
-    val addedJarsPreTaskSet = Map[String, Long](sc.addedJars.toSeq: _*)
+    val addedJarsPreTaskSet = Map[String, Long](sc.allAddedJars.toSeq: _*)
     assert(addedJarsPreTaskSet.size === 0)
 
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -1492,25 +1532,25 @@ class TaskSetManagerSuite
 
     // all tasks from the first taskset have the same jars
     val taskOption1 = manager1.resourceOffer("exec1", "host1", NO_PREF)._1
-    assert(taskOption1.get.addedJars === addedJarsPreTaskSet)
+    assert(taskOption1.get.artifacts.jars === addedJarsPreTaskSet)
     val taskOption2 = manager1.resourceOffer("exec1", "host1", NO_PREF)._1
-    assert(taskOption2.get.addedJars === addedJarsPreTaskSet)
+    assert(taskOption2.get.artifacts.jars === addedJarsPreTaskSet)
 
     // even with a jar added mid-TaskSet
     val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
     sc.addJar(jarPath.toString)
-    val addedJarsMidTaskSet = Map[String, Long](sc.addedJars.toSeq: _*)
+    val addedJarsMidTaskSet = Map[String, Long](sc.allAddedJars.toSeq: _*)
     assert(addedJarsPreTaskSet !== addedJarsMidTaskSet)
     val taskOption3 = manager1.resourceOffer("exec1", "host1", NO_PREF)._1
     // which should have the old version of the jars list
-    assert(taskOption3.get.addedJars === addedJarsPreTaskSet)
+    assert(taskOption3.get.artifacts.jars === addedJarsPreTaskSet)
 
     // and then the jar does appear in the next TaskSet
     val taskSet2 = FakeTask.createTaskSet(1)
     val manager2 = new TaskSetManager(sched, taskSet2, MAX_TASK_FAILURES, clock = new ManualClock)
 
     val taskOption4 = manager2.resourceOffer("exec1", "host1", NO_PREF)._1
-    assert(taskOption4.get.addedJars === addedJarsMidTaskSet)
+    assert(taskOption4.get.artifacts.jars === addedJarsMidTaskSet)
   }
 
   test("SPARK-24677: Avoid NoSuchElementException from MedianHeap") {
@@ -1786,7 +1826,8 @@ class TaskSetManagerSuite
     val taskSet = FakeTask.createTaskSet(1)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
-    val taskResourceAssignments = Map(GPU -> new ResourceInformation(GPU, Array("0", "1")))
+    val taskResourceAssignments = Map(
+      GPU -> Map("0" -> ONE_ENTIRE_RESOURCE, "1" -> ONE_ENTIRE_RESOURCE))
     val taskOption =
       manager.resourceOffer("exec1", "host1", NO_PREF, 2, taskResourceAssignments)._1
     assert(taskOption.isDefined)
@@ -1794,7 +1835,9 @@ class TaskSetManagerSuite
     val allocatedResources = taskOption.get.resources
     assert(allocatedCpus == 2)
     assert(allocatedResources.size == 1)
-    assert(allocatedResources(GPU).addresses sameElements Array("0", "1"))
+    assert(allocatedResources(GPU).keys.toArray.sorted sameElements Array("0", "1"))
+    assert(allocatedResources === taskResourceAssignments)
+
   }
 
   test("SPARK-26755 Ensure that a speculative task is submitted only once for execution") {
@@ -2192,7 +2235,7 @@ class TaskSetManagerSuite
 
     val tasks = Array.tabulate[Task[_]](2)(partition => new FakeLongTasks(stageId = 0, partition))
     val taskSet: TaskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None)
     val stageId = taskSet.stageId
     val stageAttemptId = taskSet.stageAttemptId
     sched.submitTasks(taskSet)

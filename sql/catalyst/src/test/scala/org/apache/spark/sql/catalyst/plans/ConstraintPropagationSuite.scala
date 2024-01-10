@@ -143,7 +143,7 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
     assert(tr.where($"c".attr > 10).select($"a".as("x"), $"b".as("y"))
       .analyze.constraints.isEmpty)
 
-    val aliasedRelation = tr.where($"a".attr > 10).select($"a".as('x), $"b",
+    val aliasedRelation = tr.where($"a".attr > 10).select($"a".as("x"), $"b",
       $"b".as("y"), $"a".as("z"))
 
     verifyConstraints(ExpressionSet(aliasedRelation.analyze.constraints),

@@ -514,9 +514,9 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
       assert(negativeTs.getTime < 0)
       val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
-      checkEvaluation(cast(negativeTs, ByteType), expectedSecs.toByte)
-      checkEvaluation(cast(negativeTs, ShortType), expectedSecs.toShort)
-      checkEvaluation(cast(negativeTs, IntegerType), expectedSecs.toInt)
+      checkEvaluation(cast(negativeTs, ByteType), null)
+      checkEvaluation(cast(negativeTs, ShortType), null)
+      checkEvaluation(cast(negativeTs, IntegerType), null)
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
     }
   }
@@ -606,6 +606,11 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
   test("SPARK-39749: cast Decimal to string") {
     val input = Literal.create(Decimal(0.000000123), DecimalType(9, 9))
     checkEvaluation(cast(input, StringType), "1.23E-7")
+  }
+
+  test("SPARK-42176: cast boolean to timestamp") {
+    checkEvaluation(cast(true, TimestampType), 1L)
+    checkEvaluation(cast(false, TimestampType), 0L)
   }
 
   private def castOverflowErrMsg(targetType: DataType): String = {

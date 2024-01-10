@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.{mutable, GenTraversableOnce}
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 object ExpressionSet {
 
   /** Constructs a new [[ExpressionSet]] by applying [[Canonicalize]] to `expressions`. */
-  def apply(expressions: TraversableOnce[Expression]): ExpressionSet = {
+  def apply(expressions: Iterable[Expression]): ExpressionSet = {
     val set = new ExpressionSet()
     expressions.foreach(set.add)
     set
@@ -106,7 +106,7 @@ class ExpressionSet protected(
     newSet
   }
 
-  def ++(elems: GenTraversableOnce[Expression]): ExpressionSet = {
+  def ++(elems: Iterable[Expression]): ExpressionSet = {
     val newSet = clone()
     elems.foreach(ele => newSet.add(this.convertToCanonicalizedIfRequired(ele)))
     newSet
@@ -118,7 +118,7 @@ class ExpressionSet protected(
     newSet
   }
 
-  def --(elems: GenTraversableOnce[Expression]): ExpressionSet = {
+  def --(elems: Iterable[Expression]): ExpressionSet = {
     val newSet = clone()
     elems.foreach(ele => newSet.remove(this.convertToCanonicalizedIfRequired(ele)))
     newSet

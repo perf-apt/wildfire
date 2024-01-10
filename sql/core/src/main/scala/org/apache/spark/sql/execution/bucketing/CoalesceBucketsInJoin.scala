@@ -20,12 +20,10 @@ package org.apache.spark.sql.execution.bucketing
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 
 /**
  * This rule coalesces one side of the `SortMergeJoin` and `ShuffledHashJoin`
@@ -42,7 +40,7 @@ object CoalesceBucketsInJoin extends Rule[SparkPlan] {
       plan: SparkPlan,
       numCoalescedBuckets: Int): SparkPlan = {
     plan transformUp {
-      case f: FileSourceScanExec =>
+      case f: FileSourceScanExec if f.relation.bucketSpec.nonEmpty =>
         f.copy(optionalNumCoalescedBuckets = Some(numCoalescedBuckets))
     }
   }
@@ -115,7 +113,11 @@ object ExtractJoinWithBuckets {
   private def hasScanOperation(plan: SparkPlan): Boolean = plan match {
     case f: FilterExec => hasScanOperation(f.child)
     case p: ProjectExec => hasScanOperation(p.child)
-    case _: FileSourceScanExec => true
+    case j: BroadcastHashJoinExec =>
+      if (j.buildSide == BuildLeft) hasScanOperation(j.right) else hasScanOperation(j.left)
+    case j: BroadcastNestedLoopJoinExec =>
+      if (j.buildSide == BuildLeft) hasScanOperation(j.right) else hasScanOperation(j.left)
+    case f: FileSourceScanExec => f.relation.bucketSpec.nonEmpty
     case _ => false
   }
 
@@ -127,27 +129,11 @@ object ExtractJoinWithBuckets {
     }
   }
 
-  /**
-   * The join keys should match with expressions for output partitioning. Note that
-   * the ordering does not matter because it will be handled in `EnsureRequirements`.
-   */
-  private def satisfiesOutputPartitioning(
-      keys: Seq[Expression],
-      partitioning: Partitioning): Boolean = {
-    partitioning match {
-      case HashPartitioning(exprs, _) if exprs.length == keys.length =>
-        exprs.forall(e => keys.exists(_.semanticEquals(e)))
-      case _ => false
-    }
-  }
-
   private def isApplicable(j: ShuffledJoin): Boolean = {
-    (j.isInstanceOf[SortMergeJoinExec] ||
-      j.isInstanceOf[ShuffledHashJoinExec]) &&
-      hasScanOperation(j.left) &&
+    hasScanOperation(j.left) &&
       hasScanOperation(j.right) &&
-      satisfiesOutputPartitioning(j.leftKeys, j.left.outputPartitioning) &&
-      satisfiesOutputPartitioning(j.rightKeys, j.right.outputPartitioning)
+      j.satisfiesOutputPartitioning(j.leftKeys, j.left.outputPartitioning) &&
+      j.satisfiesOutputPartitioning(j.rightKeys, j.right.outputPartitioning)
   }
 
   private def isDivisible(numBuckets1: Int, numBuckets2: Int): Boolean = {

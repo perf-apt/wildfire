@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.csv
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
 
 case class CSVScan(
@@ -44,8 +45,7 @@ case class CSVScan(
     dataFilters: Seq[Expression] = Seq.empty)
   extends TextBasedFileScan(sparkSession, options) {
 
-  val columnPruning = sparkSession.sessionState.conf.csvColumnPruning &&
-    !readDataSchema.exists(_.name == sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+  val columnPruning = sparkSession.sessionState.conf.csvColumnPruning
   private lazy val parsedOptions: CSVOptions = new CSVOptions(
     options.asScala.toMap,
     columnPruning = columnPruning,
@@ -81,7 +81,8 @@ case class CSVScan(
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     CSVPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, parsedOptions, actualFilters)
+      dataSchema, readDataSchema, readPartitionSchema, parsedOptions,
+      actualFilters.toImmutableArraySeq)
   }
 
   override def equals(obj: Any): Boolean = obj match {
@@ -92,11 +93,7 @@ case class CSVScan(
 
   override def hashCode(): Int = super.hashCode()
 
-  override def description(): String = {
-    super.description() + ", PushedFilters: " + pushedFilters.mkString("[", ", ", "]")
-  }
-
   override def getMetaData(): Map[String, String] = {
-    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters))
+    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters.toImmutableArraySeq))
   }
 }

@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
@@ -55,14 +56,15 @@ class RateStreamProviderSuite extends StreamTest {
   }
 
   test("RateStreamProvider in registry") {
-    val ds = DataSource.lookupDataSource("rate", spark.sqlContext.conf).newInstance()
+    val ds = DataSource.lookupDataSource("rate", spark.sessionState.conf)
+      .getConstructor().newInstance()
     assert(ds.isInstanceOf[RateStreamProvider], "Could not find rate source")
   }
 
   test("compatible with old path in registry") {
     val ds = DataSource.lookupDataSource(
       "org.apache.spark.sql.execution.streaming.RateSourceProvider",
-      spark.sqlContext.conf).newInstance()
+      spark.sessionState.conf).getConstructor().newInstance()
     assert(ds.isInstanceOf[RateStreamProvider], "Could not find rate source")
   }
 
@@ -163,7 +165,7 @@ class RateStreamProviderSuite extends StreamTest {
         checkpointLocation = temp.getCanonicalPath)
       val partitions = stream.planInputPartitions(LongOffset(0L), LongOffset(1L))
       val readerFactory = stream.createReaderFactory()
-      assert(partitions.size == 1)
+      assert(partitions.length == 1)
       val dataReader = readerFactory.createReader(partitions(0))
       val data = ArrayBuffer[InternalRow]()
       while (dataReader.next()) {
@@ -182,7 +184,7 @@ class RateStreamProviderSuite extends StreamTest {
         checkpointLocation = temp.getCanonicalPath)
       val partitions = stream.planInputPartitions(LongOffset(0L), LongOffset(1L))
       val readerFactory = stream.createReaderFactory()
-      assert(partitions.size == 11)
+      assert(partitions.length == 11)
 
       val readData = partitions
         .map(readerFactory.createReader)
@@ -193,6 +195,46 @@ class RateStreamProviderSuite extends StreamTest {
         }
 
       assert(readData.map(_.getLong(1)).sorted === 0.until(33).toArray)
+    }
+  }
+
+  testQuietly("microbatch - ramp up error") {
+    val e = intercept[SparkRuntimeException](
+      new RateStreamMicroBatchStream(
+        rowsPerSecond = Long.MaxValue,
+        rampUpTimeSeconds = 2,
+        options = CaseInsensitiveStringMap.empty(),
+        checkpointLocation = ""))
+
+    checkError(
+      exception = e,
+      errorClass = "INCORRECT_RAMP_UP_RATE",
+      parameters = Map(
+        "rowsPerSecond" -> Long.MaxValue.toString,
+        "maxSeconds" -> "1",
+        "rampUpTimeSeconds" -> "2"))
+  }
+
+  testQuietly("microbatch - end offset error") {
+    withTempDir { temp =>
+      val maxSeconds = (Long.MaxValue / 100)
+      val endSeconds = Long.MaxValue
+      val e = intercept[SparkException](
+        new RateStreamMicroBatchStream(
+          rowsPerSecond = 100,
+          rampUpTimeSeconds = 2,
+          options = CaseInsensitiveStringMap.empty(),
+          checkpointLocation = temp.getCanonicalPath)
+          .planInputPartitions(LongOffset(1), LongOffset(endSeconds)))
+
+      checkError(
+        exception = e,
+        errorClass = "INTERNAL_ERROR",
+        parameters = Map(
+          ("message" ->
+            ("Max offset with 100 rowsPerSecond is 92233720368547758, " +
+            "but it's 9223372036854775807 now.")
+            )))
     }
   }
 
@@ -270,8 +312,8 @@ class RateStreamProviderSuite extends StreamTest {
       .distinct()
     testStream(input)(
       AdvanceRateManualClock(2),
-      ExpectFailure[ArithmeticException](t => {
-        Seq("overflow", "rowsPerSecond").foreach { msg =>
+      ExpectFailure[SparkException](t => {
+        Seq("INTERNAL_ERROR", "rowsPerSecond").foreach { msg =>
           assert(t.getMessage.contains(msg))
         }
       })
@@ -317,7 +359,7 @@ class RateStreamProviderSuite extends StreamTest {
     val stream = new RateStreamContinuousStream(rowsPerSecond = 20, numPartitions = 2)
     val partitions = stream.planInputPartitions(stream.initialOffset)
     val readerFactory = stream.createContinuousReaderFactory()
-    assert(partitions.size == 2)
+    assert(partitions.length == 2)
 
     val data = scala.collection.mutable.ListBuffer[InternalRow]()
     partitions.foreach {

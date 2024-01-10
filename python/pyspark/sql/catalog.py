@@ -19,6 +19,8 @@ import sys
 import warnings
 from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
 
+from pyspark.errors import PySparkTypeError
+from pyspark.storagelevel import StorageLevel
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import StructType
@@ -78,12 +80,16 @@ class Catalog:
     """User-facing catalog API, accessible through `SparkSession.catalog`.
 
     This is a thin wrapper around its Scala implementation org.apache.spark.sql.catalog.Catalog.
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
     """
 
     def __init__(self, sparkSession: SparkSession) -> None:
         """Create a new Catalog that wraps the underlying JVM object."""
         self._sparkSession = sparkSession
         self._jsparkSession = sparkSession._jsparkSession
+        self._sc = sparkSession._sc
         self._jcatalog = sparkSession._jsparkSession.catalog()
 
     def currentCatalog(self) -> str:
@@ -114,21 +120,44 @@ class Catalog:
         """
         return self._jcatalog.setCurrentCatalog(catalogName)
 
-    def listCatalogs(self) -> List[CatalogMetadata]:
+    def listCatalogs(self, pattern: Optional[str] = None) -> List[CatalogMetadata]:
         """Returns a list of catalogs in this session.
 
         .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        pattern : str, optional
+            The pattern that the catalog name needs to match.
+
+            .. versionadded: 3.5.0
 
         Returns
         -------
         list
             A list of :class:`CatalogMetadata`.
+
+        Examples
+        --------
+        >>> spark.catalog.listCatalogs()
+        [CatalogMetadata(name='spark_catalog', description=None)]
+
+        >>> spark.catalog.listCatalogs("spark*")
+        [CatalogMetadata(name='spark_catalog', description=None)]
+
+        >>> spark.catalog.listCatalogs("hive*")
+        []
         """
-        iter = self._jcatalog.listCatalogs().toLocalIterator()
+        if pattern is None:
+            iter = self._jcatalog.listCatalogs().toLocalIterator()
+        else:
+            iter = self._jcatalog.listCatalogs(pattern).toLocalIterator()
         catalogs = []
         while iter.hasNext():
             jcatalog = iter.next()
-            catalogs.append(CatalogMetadata(name=jcatalog.name, description=jcatalog.description))
+            catalogs.append(
+                CatalogMetadata(name=jcatalog.name(), description=jcatalog.description())
+            )
         return catalogs
 
     def currentDatabase(self) -> str:
@@ -161,11 +190,18 @@ class Catalog:
         """
         return self._jcatalog.setCurrentDatabase(dbName)
 
-    def listDatabases(self) -> List[Database]:
+    def listDatabases(self, pattern: Optional[str] = None) -> List[Database]:
         """
         Returns a list of databases available across all sessions.
 
         .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        pattern : str, optional
+            The pattern that the database name needs to match.
+
+            .. versionadded: 3.5.0
 
         Returns
         -------
@@ -176,8 +212,17 @@ class Catalog:
         --------
         >>> spark.catalog.listDatabases()
         [Database(name='default', catalog='spark_catalog', description='default database', ...
+
+        >>> spark.catalog.listDatabases("def*")
+        [Database(name='default', catalog='spark_catalog', description='default database', ...
+
+        >>> spark.catalog.listDatabases("def2*")
+        []
         """
-        iter = self._jcatalog.listDatabases().toLocalIterator()
+        if pattern is None:
+            iter = self._jcatalog.listDatabases().toLocalIterator()
+        else:
+            iter = self._jcatalog.listDatabases(pattern).toLocalIterator()
         databases = []
         while iter.hasNext():
             jdb = iter.next()
@@ -261,18 +306,25 @@ class Catalog:
         """
         return self._jcatalog.databaseExists(dbName)
 
-    def listTables(self, dbName: Optional[str] = None) -> List[Table]:
+    def listTables(
+        self, dbName: Optional[str] = None, pattern: Optional[str] = None
+    ) -> List[Table]:
         """Returns a list of tables/views in the specified database.
 
         .. versionadded:: 2.0.0
 
         Parameters
         ----------
-        dbName : str
+        dbName : str, optional
             name of the database to list the tables.
 
             .. versionchanged:: 3.4.0
                Allow ``dbName`` to be qualified with catalog name.
+
+        pattern : str, optional
+            The pattern that the database name needs to match.
+
+            .. versionadded: 3.5.0
 
         Returns
         -------
@@ -290,13 +342,23 @@ class Catalog:
         >>> spark.catalog.listTables()
         [Table(name='test_view', catalog=None, namespace=[], description=None, ...
 
+        >>> spark.catalog.listTables(pattern="test*")
+        [Table(name='test_view', catalog=None, namespace=[], description=None, ...
+
+        >>> spark.catalog.listTables(pattern="table*")
+        []
+
         >>> _ = spark.catalog.dropTempView("test_view")
         >>> spark.catalog.listTables()
         []
         """
         if dbName is None:
             dbName = self.currentDatabase()
-        iter = self._jcatalog.listTables(dbName).toLocalIterator()
+
+        if pattern is None:
+            iter = self._jcatalog.listTables(dbName).toLocalIterator()
+        else:
+            iter = self._jcatalog.listTables(dbName, pattern).toLocalIterator()
         tables = []
         while iter.hasNext():
             jtable = iter.next()
@@ -353,12 +415,12 @@ class Catalog:
         Table(name='tbl1', catalog='spark_catalog', namespace=['default'], ...
         >>> _ = spark.sql("DROP TABLE tbl1")
 
-        Throw an analysis exception when the table does not exists.
+        Throw an analysis exception when the table does not exist.
 
         >>> spark.catalog.getTable("tbl1")
         Traceback (most recent call last):
             ...
-        pyspark.sql.utils.AnalysisException: ...
+        AnalysisException: ...
         """
         jtable = self._jcatalog.getTable(tableName)
         jnamespace = jtable.namespace()
@@ -375,7 +437,9 @@ class Catalog:
             isTemporary=jtable.isTemporary(),
         )
 
-    def listFunctions(self, dbName: Optional[str] = None) -> List[Function]:
+    def listFunctions(
+        self, dbName: Optional[str] = None, pattern: Optional[str] = None
+    ) -> List[Function]:
         """
         Returns a list of functions registered in the specified database.
 
@@ -383,9 +447,13 @@ class Catalog:
 
         Parameters
         ----------
-        dbName : str
+        dbName : str, optional
             name of the database to list the functions.
             ``dbName`` can be qualified with catalog name.
+        pattern : str, optional
+            The pattern that the function name needs to match.
+
+            .. versionadded: 3.5.0
 
         Returns
         -------
@@ -401,10 +469,20 @@ class Catalog:
         --------
         >>> spark.catalog.listFunctions()
         [Function(name=...
+
+        >>> spark.catalog.listFunctions(pattern="to_*")
+        [Function(name=...
+
+        >>> spark.catalog.listFunctions(pattern="*not_existing_func*")
+        []
         """
         if dbName is None:
             dbName = self.currentDatabase()
         iter = self._jcatalog.listFunctions(dbName).toLocalIterator()
+        if pattern is None:
+            iter = self._jcatalog.listFunctions(dbName).toLocalIterator()
+        else:
+            iter = self._jcatalog.listFunctions(dbName, pattern).toLocalIterator()
         functions = []
         while iter.hasNext():
             jfunction = iter.next()
@@ -493,7 +571,8 @@ class Catalog:
 
         Examples
         --------
-        >>> func = spark.sql("CREATE FUNCTION my_func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+        >>> _ = spark.sql(
+        ...     "CREATE FUNCTION my_func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
         >>> spark.catalog.getFunction("my_func1")
         Function(name='my_func1', catalog='spark_catalog', namespace=['default'], ...
 
@@ -509,7 +588,7 @@ class Catalog:
         >>> spark.catalog.getFunction("my_func2")
         Traceback (most recent call last):
             ...
-        pyspark.sql.utils.AnalysisException: ...
+        AnalysisException: ...
         """
         jfunction = self._jcatalog.getFunction(functionName)
         jnamespace = jfunction.namespace()
@@ -599,8 +678,8 @@ class Catalog:
         tableName : str
             name of the table to check existence.
             If no database is specified, first try to treat ``tableName`` as a
-            multi-layer-namespace identifier, then try to ``tableName`` as a normal table
-            name in current database if necessary.
+            multi-layer-namespace identifier, then try ``tableName`` as a normal table
+            name in the current database if necessary.
 
             .. versionchanged:: 3.4.0
                Allow ``tableName`` to be qualified with catalog name when ``dbName`` is None.
@@ -773,7 +852,13 @@ class Catalog:
             df = self._jcatalog.createTable(tableName, source, description, options)
         else:
             if not isinstance(schema, StructType):
-                raise TypeError("schema should be StructType")
+                raise PySparkTypeError(
+                    error_class="NOT_STRUCT",
+                    message_parameters={
+                        "arg_name": "schema",
+                        "arg_type": type(schema).__name__,
+                    },
+                )
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
             df = self._jcatalog.createTable(tableName, source, scala_datatype, description, options)
         return DataFrame(df, self._sparkSession)
@@ -803,7 +888,7 @@ class Catalog:
         --------
         >>> spark.createDataFrame([(1, 1)]).createTempView("my_table")
 
-        Droppping the temporary view.
+        Dropping the temporary view.
 
         >>> spark.catalog.dropTempView("my_table")
         True
@@ -840,7 +925,7 @@ class Catalog:
         --------
         >>> spark.createDataFrame([(1, 1)]).createGlobalTempView("my_table")
 
-        Droppping the global view.
+        Dropping the global view.
 
         >>> spark.catalog.dropGlobalTempView("my_table")
         True
@@ -864,6 +949,9 @@ class Catalog:
 
         .. deprecated:: 2.3.0
             Use :func:`spark.udf.register` instead.
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
         """
         warnings.warn("Deprecated in 2.3.0. Use spark.udf.register instead.", FutureWarning)
         return self._sparkSession.udf.register(name, f, returnType)
@@ -894,12 +982,12 @@ class Catalog:
         >>> spark.catalog.isCached("tbl1")
         True
 
-        Throw an analysis exception when the table does not exists.
+        Throw an analysis exception when the table does not exist.
 
         >>> spark.catalog.isCached("not_existing_table")
         Traceback (most recent call last):
             ...
-        pyspark.sql.utils.AnalysisException: ...
+        AnalysisException: ...
 
         Using the fully qualified name for the table.
 
@@ -910,8 +998,9 @@ class Catalog:
         """
         return self._jcatalog.isCached(tableName)
 
-    def cacheTable(self, tableName: str) -> None:
-        """Caches the specified table in-memory.
+    def cacheTable(self, tableName: str, storageLevel: Optional[StorageLevel] = None) -> None:
+        """Caches the specified table in-memory or with given storage level.
+        Default MEMORY_AND_DISK.
 
         .. versionadded:: 2.0.0
 
@@ -923,18 +1012,28 @@ class Catalog:
             .. versionchanged:: 3.4.0
                 Allow ``tableName`` to be qualified with catalog name.
 
+        storageLevel : :class:`StorageLevel`, optional
+            storage level to set for persistence.
+
+            .. versionchanged:: 3.5.0
+                Allow to specify storage level.
+
         Examples
         --------
         >>> _ = spark.sql("DROP TABLE IF EXISTS tbl1")
         >>> _ = spark.sql("CREATE TABLE tbl1 (name STRING, age INT) USING parquet")
         >>> spark.catalog.cacheTable("tbl1")
 
+        or
+
+        >>> spark.catalog.cacheTable("tbl1", StorageLevel.OFF_HEAP)
+
         Throw an analysis exception when the table does not exist.
 
         >>> spark.catalog.cacheTable("not_existing_table")
         Traceback (most recent call last):
             ...
-        pyspark.sql.utils.AnalysisException: ...
+        AnalysisException: ...
 
         Using the fully qualified name for the table.
 
@@ -942,7 +1041,11 @@ class Catalog:
         >>> spark.catalog.uncacheTable("tbl1")
         >>> _ = spark.sql("DROP TABLE tbl1")
         """
-        self._jcatalog.cacheTable(tableName)
+        if storageLevel:
+            javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
+            self._jcatalog.cacheTable(tableName, javaStorageLevel)
+        else:
+            self._jcatalog.cacheTable(tableName)
 
     def uncacheTable(self, tableName: str) -> None:
         """Removes the specified table from the in-memory cache.
@@ -968,10 +1071,10 @@ class Catalog:
 
         Throw an analysis exception when the table does not exist.
 
-        >>> spark.catalog.uncacheTable("not_existing_table")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> spark.catalog.uncacheTable("not_existing_table")
         Traceback (most recent call last):
             ...
-        pyspark.sql.utils.AnalysisException: ...
+        AnalysisException: ...
 
         Using the fully qualified name for the table.
 
@@ -1018,7 +1121,8 @@ class Catalog:
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
         ...     _ = spark.sql("DROP TABLE IF EXISTS tbl1")
-        ...     _ = spark.sql("CREATE TABLE tbl1 (col STRING) USING TEXT LOCATION '{}'".format(d))
+        ...     _ = spark.sql(
+        ...         "CREATE TABLE tbl1 (col STRING) USING TEXT LOCATION '{}'".format(d))
         ...     _ = spark.sql("INSERT INTO tbl1 SELECT 'abc'")
         ...     spark.catalog.cacheTable("tbl1")
         ...     spark.table("tbl1").show()
@@ -1047,7 +1151,7 @@ class Catalog:
         self._jcatalog.refreshTable(tableName)
 
     def recoverPartitions(self, tableName: str) -> None:
-        """Recovers all the partitions of the given table and update the catalog.
+        """Recovers all the partitions of the given table and updates the catalog.
 
         .. versionadded:: 2.1.1
 
@@ -1107,7 +1211,8 @@ class Catalog:
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
         ...     _ = spark.sql("DROP TABLE IF EXISTS tbl1")
-        ...     _ = spark.sql("CREATE TABLE tbl1 (col STRING) USING TEXT LOCATION '{}'".format(d))
+        ...     _ = spark.sql(
+        ...         "CREATE TABLE tbl1 (col STRING) USING TEXT LOCATION '{}'".format(d))
         ...     _ = spark.sql("INSERT INTO tbl1 SELECT 'abc'")
         ...     spark.catalog.cacheTable("tbl1")
         ...     spark.table("tbl1").show()
@@ -1131,14 +1236,6 @@ class Catalog:
         >>> _ = spark.sql("DROP TABLE tbl1")
         """
         self._jcatalog.refreshByPath(path)
-
-    def _reset(self) -> None:
-        """(Internal use only) Drop all existing databases (except "default"), tables,
-        partitions and functions, and set the current database to "default".
-
-        This is mainly used for tests.
-        """
-        self._jsparkSession.sessionState().catalog().reset()
 
 
 def _test() -> None:

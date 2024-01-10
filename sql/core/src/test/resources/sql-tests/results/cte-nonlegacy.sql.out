@@ -34,6 +34,34 @@ struct<scalarsubquery():int>
 
 
 -- !query
+SELECT * FROM
+  (
+   WITH cte AS (SELECT * FROM range(10))
+   SELECT * FROM cte WHERE id = 8
+  ) a
+UNION
+SELECT * FROM cte
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`cte`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 120,
+    "stopIndex" : 122,
+    "fragment" : "cte"
+  } ]
+}
+
+
+-- !query
 WITH
   t AS (SELECT 1),
   t2 AS (
@@ -42,9 +70,18 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<2:int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
+  }
+}
 
 
 -- !query
@@ -78,9 +115,18 @@ WITH
   )
 SELECT * FROM t2
 -- !query schema
-struct<3:int>
+struct<>
 -- !query output
-3
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
+  }
+}
 
 
 -- !query
@@ -131,9 +177,18 @@ SELECT (
   SELECT * FROM t
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
+  }
+}
 
 
 -- !query
@@ -145,9 +200,18 @@ SELECT (
   )
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
+  }
+}
 
 
 -- !query
@@ -160,9 +224,18 @@ SELECT (
   )
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-3
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
+  }
+}
 
 
 -- !query
@@ -173,9 +246,18 @@ WHERE c IN (
   SELECT * FROM t
 )
 -- !query schema
-struct<c:int>
+struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`t`"
+  }
+}
 
 
 -- !query
@@ -201,9 +283,18 @@ WITH
   )
 SELECT * FROM t
 -- !query schema
-struct<2:int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`aBc`"
+  }
+}
 
 
 -- !query
@@ -213,9 +304,18 @@ SELECT (
   SELECT * FROM aBC
 )
 -- !query schema
-struct<scalarsubquery():int>
+struct<>
 -- !query output
-2
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+  "sqlState" : "42KD0",
+  "messageParameters" : {
+    "config" : "\"spark.sql.legacy.ctePrecedencePolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "name" : "`aBc`"
+  }
+}
 
 
 -- !query
@@ -287,8 +387,21 @@ SELECT * FROM (
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: cte_invisible_inner; line 9 pos 18
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`cte_invisible_inner`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 164,
+    "stopIndex" : 182,
+    "fragment" : "cte_invisible_inner"
+  } ]
+}
 
 
 -- !query
@@ -309,5 +422,18 @@ SELECT * FROM (
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: cte_invisible_inner; line 11 pos 18
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`cte_invisible_inner`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 194,
+    "stopIndex" : 212,
+    "fragment" : "cte_invisible_inner"
+  } ]
+}

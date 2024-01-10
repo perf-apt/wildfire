@@ -139,8 +139,18 @@ SELECT a FROM test_having HAVING min(a) < max(a)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'spark_catalog.default.test_having.a' is not an aggregate function. Wrap '(min(spark_catalog.default.test_having.a) AS `min(a#x)`, max(spark_catalog.default.test_having.a) AS `max(a#x)`)' in windowing function(s) or wrap 'spark_catalog.default.test_having.a' in first() (or first_value) if you don't care which value you get.
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 48,
+    "fragment" : "SELECT a FROM test_having HAVING min(a) < max(a)"
+  } ]
+}
 
 
 -- !query
@@ -148,11 +158,10 @@ SELECT 1 AS one FROM test_having HAVING a > 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN",
-  "errorSubClass" : "WITH_SUGGESTION",
-  "sqlState" : "42000",
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`a`",
     "proposal" : "`one`"
@@ -160,9 +169,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 45,
-    "fragment" : "SELECT 1 AS one FROM test_having HAVING a > 1"
+    "startIndex" : 41,
+    "stopIndex" : 41,
+    "fragment" : "a"
   } ]
 }
 

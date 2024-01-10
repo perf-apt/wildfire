@@ -24,6 +24,8 @@ Column
 .. autosummary::
     :toctree: api/
 
+    Column.__getattr__
+    Column.__getitem__
     Column.alias
     Column.asc
     Column.asc_nulls_first
@@ -44,6 +46,7 @@ Column
     Column.getField
     Column.getItem
     Column.ilike
+    Column.isNaN
     Column.isNotNull
     Column.isNull
     Column.isin

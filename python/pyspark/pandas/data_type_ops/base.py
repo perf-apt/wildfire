@@ -17,14 +17,14 @@
 
 import numbers
 from abc import ABCMeta
-from itertools import chain
 from typing import Any, Optional, Union
+from itertools import chain
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -45,7 +45,6 @@ from pyspark.sql.types import (
     UserDefinedType,
 )
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -53,6 +52,9 @@ from pyspark.pandas.typedef.typehints import (
     extension_object_dtypes_available,
     spark_type_to_pandas_dtype,
 )
+
+# For supporting Spark Connect
+from pyspark.sql.utils import get_column_class
 
 if extension_dtypes_available:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -126,14 +128,14 @@ def _as_categorical_type(
     else:
         categories = dtype.categories
         if len(categories) == 0:
-            scol = SF.lit(-1)
+            scol = F.lit(-1)
         else:
             kvs = chain(
-                *[(SF.lit(category), SF.lit(code)) for code, category in enumerate(categories)]
+                *[(F.lit(category), F.lit(code)) for code, category in enumerate(categories)]
             )
             map_scol = F.create_map(*kvs)
+            scol = F.coalesce(map_scol[index_ops.spark.column], F.lit(-1))
 
-            scol = F.coalesce(map_scol[index_ops.spark.column], SF.lit(-1))
         return index_ops._with_new_scol(
             scol.cast(spark_type),
             field=index_ops._internal.data_fields[0].copy(
@@ -148,7 +150,7 @@ def _as_bool_type(index_ops: IndexOpsLike, dtype: Dtype) -> IndexOpsLike:
     if isinstance(dtype, extension_dtypes):
         scol = index_ops.spark.column.cast(spark_type)
     else:
-        scol = F.when(index_ops.spark.column.isNull(), SF.lit(False)).otherwise(
+        scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
             index_ops.spark.column.cast(spark_type)
         )
     return index_ops._with_new_scol(
@@ -215,6 +217,15 @@ def _is_boolean_type(right: Any) -> bool:
     return isinstance(right, bool) or (
         isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BooleanType)
     )
+
+
+def _is_extension_dtypes(object: Any) -> bool:
+    """
+    Check whether the type of given object is extension dtype or not.
+    Extention dtype includes Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype, BooleanDtype,
+    StringDtype, Float32Dtype and Float64Dtype.
+    """
+    return isinstance(getattr(object, "dtype", None), extension_dtypes)
 
 
 class DataTypeOps(object, metaclass=ABCMeta):
@@ -471,6 +482,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
         else:
             from pyspark.pandas.base import column_op
 
+            Column = get_column_class()
             return column_op(Column.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -478,6 +490,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
         _sanitize_list_like(right)
 
+        Column = get_column_class()
         return column_op(Column.__ne__)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:

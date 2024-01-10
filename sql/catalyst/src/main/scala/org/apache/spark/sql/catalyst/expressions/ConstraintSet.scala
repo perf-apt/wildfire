@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.{mutable, GenTraversableOnce}
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import ConstraintSetImplicit._
@@ -984,7 +984,7 @@ class ConstraintSet private(
 }
 
 object ConstraintSet extends ConstraintHelper {
-  private def addFiltersToConstraintSet(filters: GenTraversableOnce[Expression],
+  private def addFiltersToConstraintSet(filters: Iterable[Expression],
     constraintSet: ConstraintSet): Unit = {
     filters.foreach(expr => {
       val conditionedElement = constraintSet.convertToCanonicalizedIfRequired(expr)

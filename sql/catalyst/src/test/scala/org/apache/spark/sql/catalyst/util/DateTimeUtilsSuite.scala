@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -127,6 +127,27 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     stringToDate(UTF8String.fromString(s))
   }
 
+  test("SPARK-32559: string to date trim Control Characters") {
+    val expected = days(2015, 3, 18)
+    permuteWithWhitespaceAndControl(
+      "2015-03-18", "2015-03-18T123321", " 2015-03-18 123321", "+2015-03-18"
+    ).foreach { s =>
+      assert(toDate(s).get === expected)
+    }
+
+    permuteWithWhitespaceAndControl(
+      "INVALID_INPUT", " ", "1999-08-", "2015-03-18\u0003123321", "2015-03-18Q123321"
+    ).foreach { s =>
+      assert(toDate(s).isEmpty)
+    }
+  }
+
+  private def permuteWithWhitespaceAndControl(values: String*): Seq[String] =
+    values.flatMap { input =>
+      Seq(input, "\u0003", "\u0003", " ", " ")
+        .permutations.map(_.mkString)
+    }
+
   test("string to date") {
     assert(toDate("2015-01-28").get === days(2015, 1, 28))
     assert(toDate("2015").get === days(2015, 1, 1))
@@ -150,6 +171,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("1999-08-").isEmpty)
     assert(toDate("").isEmpty)
     assert(toDate("   ").isEmpty)
+    assert(toDate("+").isEmpty)
+    assert(toDate("-").isEmpty)
+    assert(toDate("xxx2015-01-28").isEmpty)
+    assert(toDate("--2015-01-28").isEmpty)
   }
 
   test("SPARK-35780: support full range of date string") {
@@ -315,6 +340,20 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       zoneId = getZoneId("Europe/Moscow")
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123456 Europe/Moscow", expected)
+
+      // Check whitespace and control character permutations
+      expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zid))
+      permuteWithWhitespaceAndControl(
+        "2015-03-18 12:03:17", "2015-03-18T12:03:17"
+      ).foreach { s =>
+        checkStringToTimestamp(s, expected)
+      }
+
+      permuteWithWhitespaceAndControl(
+        "INVALID_INPUT", "\t", "", "2015-03-18\u000312:03:17", "2015-03-18 12:", "2015-03-18 123"
+      ).foreach { s =>
+        checkStringToTimestamp(s, None)
+      }
     }
   }
 
@@ -937,16 +976,16 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       ("1970-01-01T00:00:00", "UTC") -> ("1969-12-31T16:00:00", "America/Los_Angeles"),
       ("2021-12-05T22:00:00", "Europe/Moscow") -> ("2021-12-06T00:00:00", "Asia/Yekaterinburg"),
       ("2021-12-06T00:01:02.123456", "Asia/Yekaterinburg") ->
-        ("2021-12-05T20:01:02.123456", "Europe/Amsterdam"),
+        ("2021-12-05T20:01:02.123456", "Europe/Brussels"),
       // 7 Nov 2021 is the DST day in the America/Los_Angeles time zone
       // Sunday, 7 November 2021, 02:00:00 clocks were turned backward 1 hour to
       // Sunday, 7 November 2021, 01:00:00 local standard time instead.
-      ("2021-11-07T09:00:00", "Europe/Amsterdam") -> ("2021-11-07T01:00:00", "America/Los_Angeles"),
-      ("2021-11-07T10:00:00", "Europe/Amsterdam") -> ("2021-11-07T01:00:00", "America/Los_Angeles"),
-      ("2021-11-07T11:00:00", "Europe/Amsterdam") -> ("2021-11-07T02:00:00", "America/Los_Angeles"),
-      ("2021-11-07T00:30:00", "America/Los_Angeles") -> ("2021-11-07T08:30:00", "Europe/Amsterdam"),
-      ("2021-11-07T01:30:00", "America/Los_Angeles") -> ("2021-11-07T09:30:00", "Europe/Amsterdam"),
-      ("2021-11-07T02:30:00", "America/Los_Angeles") -> ("2021-11-07T11:30:00", "Europe/Amsterdam")
+      ("2021-11-07T09:00:00", "Europe/Brussels") -> ("2021-11-07T01:00:00", "America/Los_Angeles"),
+      ("2021-11-07T10:00:00", "Europe/Brussels") -> ("2021-11-07T01:00:00", "America/Los_Angeles"),
+      ("2021-11-07T11:00:00", "Europe/Brussels") -> ("2021-11-07T02:00:00", "America/Los_Angeles"),
+      ("2021-11-07T00:30:00", "America/Los_Angeles") -> ("2021-11-07T08:30:00", "Europe/Brussels"),
+      ("2021-11-07T01:30:00", "America/Los_Angeles") -> ("2021-11-07T09:30:00", "Europe/Brussels"),
+      ("2021-11-07T02:30:00", "America/Los_Angeles") -> ("2021-11-07T11:30:00", "Europe/Brussels")
     ).foreach { case ((inputTs, sourceTz), (expectedTs, targetTz)) =>
       val micros = DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse(inputTs))
       val result = DateTimeUtils.convertTimestampNtzToAnotherTz(sourceTz, targetTz, micros)
@@ -984,10 +1023,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         date(1, 1, 1, 0, 0, 0, 1, zid))
     }
 
-    val e = intercept[IllegalStateException] {
-      timestampAdd("SECS", 1, date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")), getZoneId("UTC"))
-    }
-    assert(e.getMessage === "Got the unexpected unit 'SECS'.")
+    checkError(
+      exception = intercept[SparkException] {
+        timestampAdd("SECS", 1, date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")), getZoneId("UTC"))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Got the unexpected unit 'SECS'."))
   }
 
   test("SPARK-38284: difference between two timestamps in units") {
@@ -1034,13 +1075,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         zid) === -9998)
     }
 
-    val e = intercept[IllegalStateException] {
-      timestampDiff(
-        "SECS",
-        date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
-        date(2022, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
-        getZoneId("UTC"))
-    }
-    assert(e.getMessage === "Got the unexpected unit 'SECS'.")
+    checkError(
+      exception = intercept[SparkException] {
+        timestampDiff(
+          "SECS",
+          date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
+          date(2022, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
+          getZoneId("UTC"))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Got the unexpected unit 'SECS'."))
   }
 }

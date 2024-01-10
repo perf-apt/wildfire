@@ -19,15 +19,13 @@ package org.apache.spark.sql.hive.test
 
 import java.io.File
 import java.net.URI
-import java.util.{Set => JavaSet}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -72,7 +70,9 @@ object TestHive
         // LocalRelation will exercise the optimization rules better by disabling it as
         // this rule may potentially block testing of other optimization rules such as
         // ConstantPropagation etc.
-        .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)))
+        .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName))) {
+  override def conf: SQLConf = sparkSession.sessionState.conf
+}
 
 
 case class TestHiveVersion(hiveClient: HiveClient)
@@ -522,12 +522,6 @@ private[hive] class TestHiveSparkSession(
       }
     }
   }
-
-  /**
-   * Records the UDFs present when the server starts, so we can delete ones that are created by
-   * tests.
-   */
-  protected val originalUDFs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
   /**
    * Resets the test instance by deleting any table, view, temp view, and UDF that have been created

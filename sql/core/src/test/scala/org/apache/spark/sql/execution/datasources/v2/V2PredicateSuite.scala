@@ -186,7 +186,7 @@ class V2PredicateSuite extends SparkFunSuite {
     var expected = "a IN ("
     for (i <- 0 until 1000) {
       values(i) = LiteralValue(i, IntegerType)
-      expected += i + ", "
+      expected += s"$i, "
     }
     val predicate3 = new Predicate("IN", (ref("a") +: values).toArray[Expression])
     expected = expected.dropRight(2)  // remove the last ", "
@@ -263,7 +263,7 @@ class V2PredicateSuite extends SparkFunSuite {
       new Predicate("=", Array[Expression](ref("a"), LiteralValue(1, IntegerType))),
       new Predicate("=", Array[Expression](ref("b"), LiteralValue(1, IntegerType))))
     assert(predicate1.equals(predicate2))
-    assert(predicate1.references.map(_.describe()).toSeq == Seq("a", "b"))
+    assert(predicate1.references.map(_.describe()).toSeq.sorted == Seq("a", "b"))
     assert(predicate1.describe.equals("(a = 1) AND (b = 1)"))
 
     val v1Filter = V1And(EqualTo("a", 1), EqualTo("b", 1))
@@ -287,7 +287,7 @@ class V2PredicateSuite extends SparkFunSuite {
       new Predicate("=", Array[Expression](ref("a"), LiteralValue(1, IntegerType))),
       new Predicate("=", Array[Expression](ref("b"), LiteralValue(1, IntegerType))))
     assert(predicate1.equals(predicate2))
-    assert(predicate1.references.map(_.describe()).toSeq == Seq("a", "b"))
+    assert(predicate1.references.map(_.describe()).toSeq.sorted == Seq("a", "b"))
     assert(predicate1.describe.equals("(a = 1) OR (b = 1)"))
 
     val v1Filter = V1Or(EqualTo("a", 1), EqualTo("b", 1))
@@ -315,7 +315,7 @@ class V2PredicateSuite extends SparkFunSuite {
       Array[Expression](ref("a"), literal))
     assert(predicate1.equals(predicate2))
     assert(predicate1.references.map(_.describe()).toSeq == Seq("a"))
-    assert(predicate1.describe.equals("a LIKE 'str%'"))
+    assert(predicate1.describe.equals(raw"a LIKE 'str%' ESCAPE '\'"))
 
     val v1Filter = StringStartsWith("a", "str")
     assert(v1Filter.toV2.equals(predicate1))
@@ -332,7 +332,7 @@ class V2PredicateSuite extends SparkFunSuite {
       Array[Expression](ref("a"), literal))
     assert(predicate1.equals(predicate2))
     assert(predicate1.references.map(_.describe()).toSeq == Seq("a"))
-    assert(predicate1.describe.equals("a LIKE '%str'"))
+    assert(predicate1.describe.equals(raw"a LIKE '%str' ESCAPE '\'"))
 
     val v1Filter = StringEndsWith("a", "str")
     assert(v1Filter.toV2.equals(predicate1))
@@ -349,7 +349,7 @@ class V2PredicateSuite extends SparkFunSuite {
       Array[Expression](ref("a"), literal))
     assert(predicate1.equals(predicate2))
     assert(predicate1.references.map(_.describe()).toSeq == Seq("a"))
-    assert(predicate1.describe.equals("a LIKE '%str%'"))
+    assert(predicate1.describe.equals(raw"a LIKE '%str%' ESCAPE '\'"))
 
     val v1Filter = StringContains("a", "str")
     assert(v1Filter.toV2.equals(predicate1))

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{OUTER_REFERENCE, PLAN_EXPRESSION}
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.collection.BitSet
@@ -53,13 +54,20 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   @transient
   lazy val outputSet: AttributeSet = AttributeSet(output)
 
+  /**
+   * Returns the output ordering that this plan generates, although the semantics differ in logical
+   * and physical plans. In the logical plan it means global ordering of the data while in physical
+   * it means ordering in each partition.
+   */
+  def outputOrdering: Seq[SortOrder] = Nil
+
   // Override `treePatternBits` to propagate bits for its expressions.
   override lazy val treePatternBits: BitSet = {
     val bits: BitSet = getDefaultTreePatternBits
     // Propagate expressions' pattern bits
     val exprIterator = expressions.iterator
     while (exprIterator.hasNext) {
-      bits.union(exprIterator.next.treePatternBits)
+      bits.union(exprIterator.next().treePatternBits)
     }
     bits
   }
@@ -212,7 +220,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       case Some(value) => Some(recursiveTransform(value))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
-      case stream: Stream[_] => stream.map(recursiveTransform).force
+      case stream: LazyList[_] => stream.map(recursiveTransform).force
       case seq: Iterable[_] => seq.map(recursiveTransform)
       case other: AnyRef => other
       case null => null
@@ -229,6 +237,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     transformAllExpressionsWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
+  }
+
+  /**
+   * A variant of [[transformAllExpressions]] which considers plan nodes inside subqueries as well.
+   */
+  def transformAllExpressionsWithSubqueries(
+    rule: PartialFunction[Expression, Expression]): this.type = {
+    transformWithSubqueries {
+      case q => q.transformExpressions(rule)
+    }.asInstanceOf[this.type]
   }
 
   /**
@@ -290,21 +308,28 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
           newChild
         }
 
-        val attrMappingForCurrentPlan = attrMapping.filter {
-          // The `attrMappingForCurrentPlan` is used to replace the attributes of the
-          // current `plan`, so the `oldAttr` must be part of `plan.references`.
-          case (oldAttr, _) => plan.references.contains(oldAttr)
-        }
+        plan match {
+          case _: ReferenceAllColumns[_] =>
+            // It's dangerous to call `references` on an unresolved `ReferenceAllColumns`, and
+            // it's unnecessary to rewrite its attributes that all of references come from children
 
-        if (attrMappingForCurrentPlan.nonEmpty) {
-          assert(!attrMappingForCurrentPlan.groupBy(_._1.exprId)
-            .exists(_._2.map(_._2.exprId).distinct.length > 1),
-            "Found duplicate rewrite attributes")
+          case _ =>
+            val attrMappingForCurrentPlan = attrMapping.filter {
+              // The `attrMappingForCurrentPlan` is used to replace the attributes of the
+              // current `plan`, so the `oldAttr` must be part of `plan.references`.
+              case (oldAttr, _) => plan.references.contains(oldAttr)
+            }
 
-          val attributeRewrites = AttributeMap(attrMappingForCurrentPlan.toSeq)
-          // Using attrMapping from the children plans to rewrite their parent node.
-          // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
-          newPlan = newPlan.rewriteAttrs(attributeRewrites)
+            if (attrMappingForCurrentPlan.nonEmpty) {
+              assert(!attrMappingForCurrentPlan.groupBy(_._1.exprId)
+                .exists(_._2.map(_._2.exprId).distinct.length > 1),
+                s"Found duplicate rewrite attributes.\n$plan")
+
+              val attributeRewrites = AttributeMap(attrMappingForCurrentPlan)
+              // Using attrMapping from the children plans to rewrite their parent node.
+              // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
+              newPlan = newPlan.rewriteAttrs(attributeRewrites)
+            }
         }
 
         val (planAfterRule, newAttrMapping) = CurrentOrigin.withOrigin(origin) {
@@ -336,6 +361,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
         } else {
           transferAttrMapping ++ newOtherAttrMapping
         }
+        if (!(plan eq planAfterRule)) {
+          planAfterRule.copyTagsFrom(plan)
+        }
         planAfterRule -> resultAttrMapping.toSeq
       }
     }
@@ -346,7 +374,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     transformExpressions {
       case a: AttributeReference =>
         updateAttr(a, attrMap)
-      case pe: PlanExpression[PlanType] =>
+      case pe: PlanExpression[PlanType @unchecked] =>
         pe.withNewPlan(updateOuterReferencesInSubquery(pe.plan, attrMap))
     }.asInstanceOf[PlanType]
   }
@@ -376,13 +404,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       currentFragment.transformExpressions {
         case OuterReference(a: AttributeReference) =>
           OuterReference(updateAttr(a, attrMap))
-        case pe: PlanExpression[PlanType] =>
+        case pe: PlanExpression[PlanType @unchecked] =>
           pe.withNewPlan(updateOuterReferencesInSubquery(pe.plan, attrMap))
       }
     }
   }
 
-  lazy val schema: StructType = StructType.fromAttributes(output)
+  lazy val schema: StructType = DataTypeUtils.fromAttributes(output)
 
   /** Returns the output schema in the tree format. */
   def schemaString: String = schema.treeString
@@ -465,7 +493,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def transformUpWithSubqueries(f: PartialFunction[PlanType, PlanType]): PlanType = {
     transformUp { case plan =>
       val transformed = plan transformExpressionsUp {
-        case planExpression: PlanExpression[PlanType] =>
+        case planExpression: PlanExpression[PlanType @unchecked] =>
           val newPlan = planExpression.plan.transformUpWithSubqueries(f)
           planExpression.withNewPlan(newPlan)
       }
@@ -499,7 +527,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
       override def apply(plan: PlanType): PlanType = {
         val transformed = f.applyOrElse[PlanType, PlanType](plan, identity)
         transformed transformExpressionsDown {
-          case planExpression: PlanExpression[PlanType] =>
+          case planExpression: PlanExpression[PlanType @unchecked] =>
             val newPlan = planExpression.plan.transformDownWithSubqueriesAndPruning(cond, ruleId)(f)
             planExpression.withNewPlan(newPlan)
         }
@@ -507,6 +535,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     }
 
     transformDownWithPruning(cond, ruleId)(g)
+  }
+
+  /**
+   * A variant of [[foreach]] which considers plan nodes inside subqueries as well.
+   */
+  def foreachWithSubqueries(f: PlanType => Unit): Unit = {
+    def actualFunc(plan: PlanType): Unit = {
+      f(plan)
+      plan.subqueries.foreach(_.foreachWithSubqueries(f))
+    }
+    foreach(actualFunc)
   }
 
   /**

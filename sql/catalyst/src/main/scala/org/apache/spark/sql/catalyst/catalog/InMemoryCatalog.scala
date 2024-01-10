@@ -90,7 +90,7 @@ class InMemoryCatalog(
       specs: Seq[TablePartitionSpec]): Unit = {
     specs.foreach { s =>
       if (partitionExists(db, table, s)) {
-        throw new PartitionAlreadyExistsException(db = db, table = table, spec = s)
+        throw new PartitionsAlreadyExistException(db = db, table = table, spec = s)
       }
     }
   }
@@ -126,7 +126,7 @@ class InMemoryCatalog(
             dbDefinition, e)
       }
       val newDb = dbDefinition.copy(
-        properties = dbDefinition.properties ++ Map(PROP_OWNER -> Utils.getCurrentUserName))
+        properties = dbDefinition.properties ++ Map(PROP_OWNER -> Utils.getCurrentUserName()))
       catalog.put(dbDefinition.name, new DatabaseDesc(newDb))
     }
   }

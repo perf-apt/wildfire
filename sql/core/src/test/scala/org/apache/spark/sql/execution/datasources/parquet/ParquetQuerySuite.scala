@@ -255,6 +255,18 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("SPARK-46466: write and read TimestampNTZ with legacy rebase mode") {
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> "LEGACY") {
+      withTable("ts") {
+        sql("create table ts (c1 timestamp_ntz) using parquet")
+        sql("insert into ts values (timestamp_ntz'0900-01-01 01:10:10')")
+        withAllParquetReaders {
+          checkAnswer(spark.table("ts"), sql("select timestamp_ntz'0900-01-01 01:10:10'"))
+        }
+      }
+    }
+  }
+
   test("Enabling/disabling merging partfiles when merging parquet schema") {
     def testSchemaMerging(expectedColumnNumber: Int): Unit = {
       withTempDir { dir =>
@@ -964,7 +976,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     withAllParquetReaders {
       withTempPath { path =>
         // Repeated values for dictionary encoding.
-        Seq(Some("A"), Some("A"), None).toDF.repartition(1)
+        Seq(Some("A"), Some("A"), None).toDF().repartition(1)
           .write.parquet(path.getAbsolutePath)
         val df = spark.read.parquet(path.getAbsolutePath)
         checkAnswer(stripSparkFilter(df.where("NOT (value <=> 'A')")), df)
@@ -1037,7 +1049,9 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-        Seq("a DECIMAL(3, 2)", "b DECIMAL(18, 1)", "c DECIMAL(37, 1)").foreach { schema =>
+       val schema1 = "a DECIMAL(3, 2), b DECIMAL(18, 3), c DECIMAL(37, 3)"
+        checkAnswer(readParquet(schema1, path), df)
+        Seq("a DECIMAL(3, 0)", "b DECIMAL(18, 1)", "c DECIMAL(37, 1)").foreach { schema =>
           val e = intercept[SparkException] {
             readParquet(schema, path).collect()
           }.getCause.getCause
@@ -1095,6 +1109,20 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("row group skipping doesn't overflow when reading into larger type") {
+    withTempPath { path =>
+      Seq(0).toDF("a").write.parquet(path.toString)
+      withAllParquetReaders {
+        val result =
+          spark.read
+            .schema("a LONG")
+            .parquet(path.toString)
+            .where(s"a < ${Long.MaxValue}")
+        checkAnswer(result, Row(0))
+      }
+    }
+  }
+
   test("SPARK-36825, SPARK-36852: create table with ANSI intervals") {
     withTable("tbl") {
       sql("create table tbl (c1 interval day, c2 interval year to month) using parquet")
@@ -1106,6 +1134,16 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         (null, null),
         (Duration.ofDays(100).negated(), Period.ofYears(1).plusMonths(11).negated())).toDF()
       checkAnswer(sql("select * from tbl"), expected)
+    }
+  }
+
+  test("SPARK-44805: cast of struct with two arrays") {
+    withTable("tbl") {
+      sql("create table tbl (value struct<f1:array<int>,f2:array<int>>) using parquet")
+      sql("insert into tbl values (named_struct('f1', array(1, 2, 3), 'f2', array(1, 1, 2)))")
+      val df = sql("select cast(value as struct<f1:array<double>,f2:array<int>>) AS value from tbl")
+      val expected = Row(Row(Array(1.0d, 2.0d, 3.0d), Array(1, 1, 2))) :: Nil
+      checkAnswer(df, expected)
     }
   }
 }
@@ -1161,24 +1199,34 @@ class ParquetV1QuerySuite extends ParquetQuerySuite {
   }
 
   test("SPARK-39833: pushed filters with count()") {
-    withTempPath { path =>
-      val p = s"${path.getCanonicalPath}${File.separator}col=0${File.separator}"
-      Seq(0).toDF("COL").coalesce(1).write.save(p)
-      val df = spark.read.parquet(path.getCanonicalPath)
-      checkAnswer(df.filter("col = 0"), Seq(Row(0)))
-      assert(df.filter("col = 0").count() == 1, "col")
-      assert(df.filter("COL = 0").count() == 1, "COL")
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withTempPath { path =>
+          val p = s"${path.getCanonicalPath}${File.separator}col=0${File.separator}"
+          Seq(0).toDF("COL").coalesce(1).write.save(p)
+          val df = spark.read.parquet(path.getCanonicalPath)
+          val expected = if (caseSensitive) Seq(Row(0, 0)) else Seq(Row(0))
+          checkAnswer(df.filter("col = 0"), expected)
+          assert(df.filter("col = 0").count() == 1, "col")
+          assert(df.filter("COL = 0").count() == 1, "COL")
+        }
+      }
     }
   }
 
   test("SPARK-39833: pushed filters with project without filter columns") {
-    withTempPath { path =>
-      val p = s"${path.getCanonicalPath}${File.separator}col=0${File.separator}"
-      Seq((0, 1)).toDF("COL", "a").coalesce(1).write.save(p)
-      val df = spark.read.parquet(path.getCanonicalPath)
-      checkAnswer(df.filter("col = 0"), Seq(Row(0, 1)))
-      assert(df.filter("col = 0").select("a").collect().toSeq == Row(1) :: Nil)
-      assert(df.filter("col = 0 and a = 1").select("a").collect().toSeq == Row(1) :: Nil)
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withTempPath { path =>
+          val p = s"${path.getCanonicalPath}${File.separator}col=0${File.separator}"
+          Seq((0, 1)).toDF("COL", "a").coalesce(1).write.save(p)
+          val df = spark.read.parquet(path.getCanonicalPath)
+          val expected = if (caseSensitive) Seq(Row(0, 1, 0)) else Seq(Row(0, 1))
+          checkAnswer(df.filter("col = 0"), expected)
+          assert(df.filter("col = 0").select("a").collect().toSeq == Row(1) :: Nil)
+          assert(df.filter("col = 0 and a = 1").select("a").collect().toSeq == Row(1) :: Nil)
+        }
+      }
     }
   }
 }
@@ -1285,7 +1333,7 @@ object TestingUDT {
     override def userClass: Class[TestArray] = classOf[TestArray]
 
     override def deserialize(datum: Any): TestArray = datum match {
-      case value: ArrayData => TestArray(value.toLongArray.toSeq)
+      case value: ArrayData => TestArray(value.toLongArray().toSeq)
     }
   }
 

@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COALESCE, NULL_CHECK, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
-
 
 /**
  * An expression that is evaluated to the first non-null input.
@@ -57,10 +58,10 @@ case class Coalesce(children: Seq[Expression])
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName requires at least one argument")
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 0"), children.length)
     } else {
-      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
+      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), prettyName)
     }
   }
 
@@ -68,6 +69,10 @@ case class Coalesce(children: Seq[Expression])
    * We should only return the first child, because others may not get accessed.
    */
   override def alwaysEvaluatedInputs: Seq[Expression] = children.head :: Nil
+
+  override def withNewAlwaysEvaluatedInputs(alwaysEvaluatedInputs: Seq[Expression]): Coalesce = {
+    withNewChildrenInternal(alwaysEvaluatedInputs.toIndexedSeq ++ children.drop(1))
+  }
 
   override def branchGroups: Seq[Seq[Expression]] = if (children.length > 1) {
     // If there is only one child, the first child is already covered by
@@ -153,7 +158,11 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(left: Expression, right: Expression) = {
-    this(left, right, If(EqualTo(left, right), Literal.create(null, left.dataType), left))
+    this(left, right, {
+      val commonExpr = CommonExpressionDef(left)
+      val ref = new CommonExpressionRef(commonExpr)
+      With(If(EqualTo(ref, right), Literal.create(null, left.dataType), ref), Seq(commonExpr))
+    })
   }
 
   override def parameters: Seq[Expression] = Seq(left, right)
@@ -284,6 +293,10 @@ case class NaNvl(left: Expression, right: Expression)
    * the right child will not be accessed.
    */
   override def alwaysEvaluatedInputs: Seq[Expression] = left :: Nil
+
+  override def withNewAlwaysEvaluatedInputs(alwaysEvaluatedInputs: Seq[Expression]): NaNvl = {
+    copy(left = alwaysEvaluatedInputs.head)
+  }
 
   override def branchGroups: Seq[Seq[Expression]] = Seq(children)
 

@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / ANSI (master, Hadoop 3, JDK 8, Scala 2.12)"
+name: "Build / ANSI (master, Hadoop 3, JDK 17, Scala 2.13)"
 
 on:
   schedule:
@@ -25,11 +25,13 @@ on:
 
 jobs:
   run-build:
+    permissions:
+      packages: write
     name: Run
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 8
+      java: 17
       branch: master
       hadoop: hadoop3
       envs: >-

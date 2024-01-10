@@ -95,12 +95,12 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'N A N'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"FLOAT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"FLOAT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -120,12 +120,12 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'NaN x'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"FLOAT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"FLOAT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -145,12 +145,12 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "' INFINITY    x'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"FLOAT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"FLOAT\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -194,12 +194,12 @@ struct<>
 org.apache.spark.SparkNumberFormatException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'nan'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"DECIMAL(10,0)\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"DECIMAL(10,0)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -391,12 +391,12 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
-    "value" : "2.14748365E9",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"FLOAT\"",
     "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "2.14748365E9"
   }
 }
 
@@ -417,12 +417,12 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
-    "value" : "-2.1474839E9",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"FLOAT\"",
     "targetType" : "\"INT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "-2.1474839E9"
   }
 }
 
@@ -459,12 +459,12 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22005",
+  "sqlState" : "22003",
   "messageParameters" : {
-    "value" : "-9.22338E18",
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"FLOAT\"",
     "targetType" : "\"BIGINT\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "value" : "-9.22338E18"
   }
 }
 

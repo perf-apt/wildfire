@@ -105,7 +105,7 @@ is set to the chosen version of Spark:
   ...
   <dependency>
     <groupId>org.apache.spark</groupId>
-    <artifactId>hadoop-cloud_{{site.SCALA_BINARY_VERSION}}</artifactId>
+    <artifactId>spark-hadoop-cloud_{{site.SCALA_BINARY_VERSION}}</artifactId>
     <version>${spark.version}</version>
     <scope>provided</scope>
   </dependency>
@@ -121,7 +121,7 @@ for talking to cloud infrastructures, in which case this module may not be neede
 Spark jobs must authenticate with the object stores to access data within them.
 
 1. When Spark is running in a cloud infrastructure, the credentials are usually automatically set up.
-1. `spark-submit` reads the `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+1. `spark-submit` is able to read the `AWS_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
 and `AWS_SESSION_TOKEN` environment variables and sets the associated authentication options
 for the `s3n` and `s3a` connectors to Amazon S3.
 1. In a Hadoop cluster, settings may be set in the `core-site.xml` file.
@@ -291,7 +291,7 @@ Amazon EMR has its own S3-aware committers for parquet data.
 For instructions on use, see
 [the EMRFS S3-optimized committer](https://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spark-s3-optimized-committer.html)
 
-For implementation and performanc details, see
+For implementation and performance details, see
 ["Improve Apache Spark write performance on Apache Parquet formats with the EMRFS S3-optimized committer"](https://aws.amazon.com/blogs/big-data/improve-apache-spark-write-performance-on-apache-parquet-formats-with-the-emrfs-s3-optimized-committer/
 
 
@@ -306,10 +306,10 @@ directory listing information from the task committers to the job committer.
 These manifests can be written atomically, without relying on atomic directory rename,
 something GCS lacks.
 
-The job commmitter reads these manifests and will rename files from the task output
+The job committer reads these manifests and will rename files from the task output
 directories directly into the destination directory, in parallel, with optional
 rate limiting to avoid throttling IO.
-This deliviers performance and scalability on the object stores.
+This delivers performance and scalability on the object stores.
 
 It is not critical for job correctness to use this with Azure storage; the
 classic FileOutputCommitter is safe there -however this new committer scales

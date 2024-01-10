@@ -29,7 +29,7 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
     )
 
 
-class _MissingPandasLikeDataFrame:
+class MissingPandasLikeDataFrame:
     # NOTE: Please update the pandas-on-Spark reference document when implementing the new API.
     # Documentation path: `python/docs/source/reference/pyspark.pandas/`.
 
@@ -53,10 +53,6 @@ class _MissingPandasLikeDataFrame:
     tz_localize = _unsupported_function("tz_localize")
 
     # Deprecated functions
-    tshift = _unsupported_function("tshift", deprecated=True, reason="Please use shift instead.")
-    slice_shift = _unsupported_function(
-        "slice_shift", deprecated=True, reason="You can use DataFrame/Series.shift instead."
-    )
     lookup = _unsupported_function(
         "lookup", deprecated=True, reason="Use DataFrame.melt and DataFrame.loc instead."
     )

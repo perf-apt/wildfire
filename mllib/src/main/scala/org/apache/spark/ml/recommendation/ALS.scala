@@ -47,7 +47,7 @@ import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
 import org.apache.spark.util.random.XORShiftRandom
@@ -245,8 +245,8 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
     implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
     ratingCol -> "rating", nonnegative -> false, checkpointInterval -> 10,
-    intermediateStorageLevel -> "MEMORY_AND_DISK", finalStorageLevel -> "MEMORY_AND_DISK",
-    coldStartStrategy -> "nan")
+    intermediateStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
+    finalStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(), coldStartStrategy -> "nan")
 
   /**
    * Validates and transforms the input schema.
@@ -324,13 +324,22 @@ class ALSModel private[ml] (
     // create a new column named map(predictionCol) by running the predict UDF.
     val validatedUsers = checkIntegers(dataset, $(userCol))
     val validatedItems = checkIntegers(dataset, $(itemCol))
+
+    val validatedInputAlias = Identifiable.randomUID("__als_validated_input")
+    val itemFactorsAlias = Identifiable.randomUID("__als_item_factors")
+    val userFactorsAlias = Identifiable.randomUID("__als_user_factors")
+
     val predictions = dataset
-      .join(userFactors,
-        validatedUsers === userFactors("id"), "left")
-      .join(itemFactors,
-        validatedItems === itemFactors("id"), "left")
-      .select(dataset("*"),
-        predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
+      .withColumns(Seq($(userCol), $(itemCol)), Seq(validatedUsers, validatedItems))
+      .alias(validatedInputAlias)
+      .join(userFactors.alias(userFactorsAlias),
+        col(s"${validatedInputAlias}.${$(userCol)}") === col(s"${userFactorsAlias}.id"), "left")
+      .join(itemFactors.alias(itemFactorsAlias),
+        col(s"${validatedInputAlias}.${$(itemCol)}") === col(s"${itemFactorsAlias}.id"), "left")
+      .select(col(s"${validatedInputAlias}.*"),
+        predict(col(s"${userFactorsAlias}.features"), col(s"${itemFactorsAlias}.features"))
+          .alias($(predictionCol)))
+
     getColdStartStrategy match {
       case ALSModel.Drop =>
         predictions.na.drop("all", Seq($(predictionCol)))
@@ -463,8 +472,10 @@ class ALSModel private[ml] (
       num: Int,
       blockSize: Int): DataFrame = {
     import srcFactors.sparkSession.implicits._
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
 
+    val ratingColumn = "rating"
+    val recommendColumn = "recommendations"
     val srcFactorsBlocked = blockify(srcFactors.as[(Int, Array[Float])], blockSize)
     val dstFactorsBlocked = blockify(dstFactors.as[(Int, Array[Float])], blockSize)
     val ratings = srcFactorsBlocked.crossJoin(dstFactorsBlocked)
@@ -496,18 +507,20 @@ class ALSModel private[ml] (
               .iterator.map { j => (srcId, dstIds(j), scores(j)) }
           }
         }
-      }
-    // We'll force the IDs to be Int. Unfortunately this converts IDs to Int in the output.
-    val topKAggregator = new TopByKeyAggregator[Int, Int, Float](num, Ordering.by(_._2))
-    val recs = ratings.as[(Int, Int, Float)].groupByKey(_._1).agg(topKAggregator.toColumn)
-      .toDF("id", "recommendations")
+      }.toDF(srcOutputColumn, dstOutputColumn, ratingColumn)
 
     val arrayType = ArrayType(
       new StructType()
         .add(dstOutputColumn, IntegerType)
-        .add("rating", FloatType)
+        .add(ratingColumn, FloatType)
     )
-    recs.select($"id".as(srcOutputColumn), $"recommendations".cast(arrayType))
+
+    ratings.groupBy(srcOutputColumn)
+      .agg(collect_top_k(struct(ratingColumn, dstOutputColumn), num, false))
+      .as[(Int, Seq[(Float, Int)])]
+      .map(t => (t._1, t._2.map(p => (p._2, p._1))))
+      .toDF(srcOutputColumn, recommendColumn)
+      .withColumn(recommendColumn, col(recommendColumn).cast(arrayType))
   }
 
   /**

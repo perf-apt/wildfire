@@ -32,7 +32,7 @@ class PandasMapOpsMixin:
     """
 
     def mapInPandas(
-        self, func: "PandasMapIterFunction", schema: Union[StructType, str]
+        self, func: "PandasMapIterFunction", schema: Union[StructType, str], barrier: bool = False
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -44,9 +44,13 @@ class PandasMapOpsMixin:
         together as an iterator of `pandas.DataFrame`\\s to the function and the
         returned iterator of `pandas.DataFrame`\\s are combined as a :class:`DataFrame`.
         Each `pandas.DataFrame` size can be controlled by
-        `spark.sql.execution.arrow.maxRecordsPerBatch`.
+        `spark.sql.execution.arrow.maxRecordsPerBatch`. The size of the function's input and
+        output can be different.
 
         .. versionadded:: 3.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -56,15 +60,63 @@ class PandasMapOpsMixin:
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        barrier : bool, optional, default False
+            Use barrier mode execution.
+
+            .. versionadded: 3.5.0
 
         Examples
         --------
-        >>> from pyspark.sql.functions import pandas_udf
         >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
+
+        Filter rows with id equal to 1:
+
         >>> def filter_func(iterator):
         ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
+        ...
         >>> df.mapInPandas(filter_func, df.schema).show()  # doctest: +SKIP
+        +---+---+
+        | id|age|
+        +---+---+
+        |  1| 21|
+        +---+---+
+
+        Compute the mean age for each id:
+
+        >>> def mean_age(iterator):
+        ...     for pdf in iterator:
+        ...         yield pdf.groupby("id").mean().reset_index()
+        ...
+        >>> df.mapInPandas(mean_age, "id: bigint, age: double").show()  # doctest: +SKIP
+        +---+----+
+        | id| age|
+        +---+----+
+        |  1|21.0|
+        |  2|30.0|
+        +---+----+
+
+        Add a new column with the double of the age:
+
+        >>> def double_age(iterator):
+        ...     for pdf in iterator:
+        ...         pdf["double_age"] = pdf["age"] * 2
+        ...         yield pdf
+        ...
+        >>> df.mapInPandas(
+        ...     double_age, "id: bigint, age: bigint, double_age: bigint").show()  # doctest: +SKIP
+        +---+---+----------+
+        | id|age|double_age|
+        +---+---+----------+
+        |  1| 21|        42|
+        |  2| 30|        60|
+        +---+---+----------+
+
+        Set ``barrier`` to ``True`` to force the ``mapInPandas`` stage running in the
+        barrier mode, it ensures all Python workers in the stage will be
+        launched concurrently.
+
+        >>> df.mapInPandas(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
         +---+---+
         | id|age|
         +---+---+
@@ -89,11 +141,11 @@ class PandasMapOpsMixin:
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.mapInPandas(udf_column._jc.expr())
+        jdf = self._jdf.mapInPandas(udf_column._jc.expr(), barrier)
         return DataFrame(jdf, self.sparkSession)
 
     def mapInArrow(
-        self, func: "ArrowMapIterFunction", schema: Union[StructType, str]
+        self, func: "ArrowMapIterFunction", schema: Union[StructType, str], barrier: bool = False
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -105,7 +157,8 @@ class PandasMapOpsMixin:
         together as an iterator of `pyarrow.RecordBatch`\\s to the function and the
         returned iterator of `pyarrow.RecordBatch`\\s are combined as a :class:`DataFrame`.
         Each `pyarrow.RecordBatch` size can be controlled by
-        `spark.sql.execution.arrow.maxRecordsPerBatch`.
+        `spark.sql.execution.arrow.maxRecordsPerBatch`. The size of the function's input and
+        output can be different.
 
         .. versionadded:: 3.3.0
 
@@ -117,6 +170,10 @@ class PandasMapOpsMixin:
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        barrier : bool, optional, default False
+            Use barrier mode execution.
+
+            .. versionadded: 3.5.0
 
         Examples
         --------
@@ -127,6 +184,17 @@ class PandasMapOpsMixin:
         ...         pdf = batch.to_pandas()
         ...         yield pyarrow.RecordBatch.from_pandas(pdf[pdf.id == 1])
         >>> df.mapInArrow(filter_func, df.schema).show()  # doctest: +SKIP
+        +---+---+
+        | id|age|
+        +---+---+
+        |  1| 21|
+        +---+---+
+
+        Set ``barrier`` to ``True`` to force the ``mapInArrow`` stage running in the
+        barrier mode, it ensures all Python workers in the stage will be
+        launched concurrently.
+
+        >>> df.mapInArrow(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
         +---+---+
         | id|age|
         +---+---+
@@ -152,7 +220,7 @@ class PandasMapOpsMixin:
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_ARROW_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr())
+        jdf = self._jdf.mapInArrow(udf_column._jc.expr(), barrier)
         return DataFrame(jdf, self.sparkSession)
 
 

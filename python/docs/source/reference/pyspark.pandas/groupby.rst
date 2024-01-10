@@ -68,12 +68,12 @@ Computations / Descriptive Stats
    GroupBy.filter
    GroupBy.first
    GroupBy.last
-   GroupBy.mad
    GroupBy.max
    GroupBy.mean
    GroupBy.median
    GroupBy.min
    GroupBy.nth
+   GroupBy.prod
    GroupBy.rank
    GroupBy.sem
    GroupBy.std
@@ -89,7 +89,6 @@ Computations / Descriptive Stats
    GroupBy.bfill
    GroupBy.ffill
    GroupBy.head
-   GroupBy.backfill
    GroupBy.shift
    GroupBy.tail
 

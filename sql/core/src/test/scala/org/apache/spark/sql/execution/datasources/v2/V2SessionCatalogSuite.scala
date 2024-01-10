@@ -21,7 +21,7 @@ import java.net.URI
 import java.util
 import java.util.Collections
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
@@ -29,7 +29,9 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -37,6 +39,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeAndAfter {
 
   val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
+  val emptyTrans: Array[Transform] = Array.empty
   val schema: StructType = new StructType()
       .add("id", IntegerType)
       .add("data", StringType)
@@ -44,6 +47,8 @@ abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeA
   val testNs: Array[String] = Array("db")
   val defaultNs: Array[String] = Array("default")
   val testIdent: Identifier = Identifier.of(testNs, "test_table")
+  val testIdentQuoted: String = (testIdent.namespace :+ testIdent.name)
+    .map(part => quoteIdentifier(part)).mkString(".")
 
   def newCatalog(): V2SessionCatalog = {
     val newCatalog = new V2SessionCatalog(spark.sessionState.catalog)
@@ -81,6 +86,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   }
 
   private val testIdentNew = Identifier.of(testNs, "test_table_new")
+  private val testIdentNewQuoted = (testIdentNew.namespace :+ testIdentNew.name)
+    .map(part => quoteIdentifier(part)).mkString(".")
 
   test("listTables") {
     val catalog = newCatalog()
@@ -90,13 +97,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(catalog.listTables(Array("ns")).isEmpty)
 
-    catalog.createTable(ident1, schema, Array.empty, emptyProps)
+    catalog.createTable(ident1, schema, emptyTrans, emptyProps)
 
     assert(catalog.listTables(Array("ns")).toSet == Set(ident1))
     assert(catalog.listTables(Array("ns2")).isEmpty)
 
-    catalog.createTable(ident3, schema, Array.empty, emptyProps)
-    catalog.createTable(ident2, schema, Array.empty, emptyProps)
+    catalog.createTable(ident3, schema, emptyTrans, emptyProps)
+    catalog.createTable(ident2, schema, emptyTrans, emptyProps)
 
     assert(catalog.listTables(Array("ns")).toSet == Set(ident1, ident2))
     assert(catalog.listTables(Array("ns2")).toSet == Set(ident3))
@@ -118,7 +125,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(!catalog.tableExists(testIdent))
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
     assert(parsed == Seq("db", "test_table"))
@@ -136,7 +144,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(!catalog.tableExists(testIdent))
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, properties)
+    catalog.createTable(testIdent, schema, emptyTrans, properties)
+    val table = catalog.loadTable(testIdent)
 
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
     assert(parsed == Seq("db", "test_table"))
@@ -151,14 +160,17 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(!catalog.tableExists(testIdent))
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
+
+    val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
+      .map(part => quoteIdentifier(part)).mkString(".")
 
     val exc = intercept[TableAlreadyExistsException] {
-      catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+      catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
     }
 
-    assert(exc.message.contains(table.name()))
-    assert(exc.message.contains("already exists"))
+    checkErrorTableAlreadyExists(exc, parsed)
 
     assert(catalog.tableExists(testIdent))
   }
@@ -176,26 +188,30 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(!catalog.tableExists(testIdent))
 
     // default location
-    val t1 = catalog.createTable(testIdent, schema, Array.empty, properties).asInstanceOf[V1Table]
+    catalog.createTable(testIdent, schema, emptyTrans, properties)
+    val t1 = catalog.loadTable(testIdent).asInstanceOf[V1Table]
     assert(t1.catalogTable.location ===
       spark.sessionState.catalog.defaultTablePath(testIdent.asTableIdentifier))
     catalog.dropTable(testIdent)
 
     // relative path
     properties.put(TableCatalog.PROP_LOCATION, "relative/path")
-    val t2 = catalog.createTable(testIdent, schema, Array.empty, properties).asInstanceOf[V1Table]
+    catalog.createTable(testIdent, schema, emptyTrans, properties)
+    val t2 = catalog.loadTable(testIdent).asInstanceOf[V1Table]
     assert(t2.catalogTable.location === makeQualifiedPathWithWarehouse("db.db/relative/path"))
     catalog.dropTable(testIdent)
 
     // absolute path without scheme
     properties.put(TableCatalog.PROP_LOCATION, "/absolute/path")
-    val t3 = catalog.createTable(testIdent, schema, Array.empty, properties).asInstanceOf[V1Table]
+    catalog.createTable(testIdent, schema, emptyTrans, properties)
+    val t3 = catalog.loadTable(testIdent).asInstanceOf[V1Table]
     assert(t3.catalogTable.location.toString === "file:///absolute/path")
     catalog.dropTable(testIdent)
 
     // absolute path with scheme
     properties.put(TableCatalog.PROP_LOCATION, "file:/absolute/path")
-    val t4 = catalog.createTable(testIdent, schema, Array.empty, properties).asInstanceOf[V1Table]
+    catalog.createTable(testIdent, schema, emptyTrans, properties)
+    val t4 = catalog.loadTable(testIdent).asInstanceOf[V1Table]
     assert(t4.catalogTable.location.toString === "file:/absolute/path")
     catalog.dropTable(testIdent)
   }
@@ -205,7 +221,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(!catalog.tableExists(testIdent))
 
-    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
 
     assert(catalog.tableExists(testIdent))
 
@@ -217,12 +233,11 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("loadTable") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
     val loaded = catalog.loadTable(testIdent)
 
-    assert(table.name == loaded.name)
-    assert(table.schema == loaded.schema)
-    assert(table.properties == loaded.properties)
+    assert(loaded.name == testIdent.toString)
+    assert(loaded.schema == schema)
   }
 
   test("loadTable: table does not exist") {
@@ -232,13 +247,14 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.loadTable(testIdent)
     }
 
-    assert(exc.message.contains("Table or view 'test_table' not found in database 'db'"))
+    checkErrorTableNotFound(exc, testIdentQuoted)
   }
 
   test("invalidateTable") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
     catalog.invalidateTable(testIdent)
 
     val loaded = catalog.loadTable(testIdent)
@@ -259,11 +275,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: add property") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(filterV2TableProperties(table.properties) == Map())
 
-    val updated = catalog.alterTable(testIdent, TableChange.setProperty("prop-1", "1"))
+    catalog.alterTable(testIdent, TableChange.setProperty("prop-1", "1"))
+    val updated = catalog.loadTable(testIdent)
     assert(filterV2TableProperties(updated.properties) == Map("prop-1" -> "1"))
 
     val loaded = catalog.loadTable(testIdent)
@@ -278,11 +296,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val properties = new util.HashMap[String, String]()
     properties.put("prop-1", "1")
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, properties)
+    catalog.createTable(testIdent, schema, emptyTrans, properties)
+    val table = catalog.loadTable(testIdent)
 
     assert(filterV2TableProperties(table.properties) == Map("prop-1" -> "1"))
 
-    val updated = catalog.alterTable(testIdent, TableChange.setProperty("prop-2", "2"))
+    catalog.alterTable(testIdent, TableChange.setProperty("prop-2", "2"))
+    val updated = catalog.loadTable(testIdent)
     assert(filterV2TableProperties(updated.properties) == Map("prop-1" -> "1", "prop-2" -> "2"))
 
     val loaded = catalog.loadTable(testIdent)
@@ -297,11 +317,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val properties = new util.HashMap[String, String]()
     properties.put("prop-1", "1")
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, properties)
+    catalog.createTable(testIdent, schema, emptyTrans, properties)
+    val table = catalog.loadTable(testIdent)
 
     assert(filterV2TableProperties(table.properties) == Map("prop-1" -> "1"))
 
-    val updated = catalog.alterTable(testIdent, TableChange.removeProperty("prop-1"))
+    catalog.alterTable(testIdent, TableChange.removeProperty("prop-1"))
+    val updated = catalog.loadTable(testIdent)
     assert(filterV2TableProperties(updated.properties) == Map())
 
     val loaded = catalog.loadTable(testIdent)
@@ -313,11 +335,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: remove missing property") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(filterV2TableProperties(table.properties) == Map())
 
-    val updated = catalog.alterTable(testIdent, TableChange.removeProperty("prop-1"))
+    catalog.alterTable(testIdent, TableChange.removeProperty("prop-1"))
+    val updated = catalog.loadTable(testIdent)
     assert(filterV2TableProperties(updated.properties) == Map())
 
     val loaded = catalog.loadTable(testIdent)
@@ -329,11 +353,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: add top-level column") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
-    val updated = catalog.alterTable(testIdent, TableChange.addColumn(Array("ts"), TimestampType))
+    catalog.alterTable(testIdent, TableChange.addColumn(Array("ts"), TimestampType))
+    val updated = catalog.loadTable(testIdent)
 
     assert(updated.schema == schema.add("ts", TimestampType))
   }
@@ -341,12 +367,14 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: add required column") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
-    val updated = catalog.alterTable(testIdent,
+    catalog.alterTable(testIdent,
       TableChange.addColumn(Array("ts"), TimestampType, false))
+    val updated = catalog.loadTable(testIdent)
 
     assert(updated.schema == schema.add("ts", TimestampType, nullable = false))
   }
@@ -354,12 +382,14 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: add column with comment") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
-    val updated = catalog.alterTable(testIdent,
+    catalog.alterTable(testIdent,
       TableChange.addColumn(Array("ts"), TimestampType, false, "comment text"))
+    val updated = catalog.loadTable(testIdent)
 
     val field = StructField("ts", TimestampType, nullable = false).withComment("comment text")
     assert(updated.schema == schema.add(field))
@@ -371,12 +401,14 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val pointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
     val tableSchema = schema.add("point", pointStruct)
 
-    val table = catalog.createTable(testIdent, tableSchema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, tableSchema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == tableSchema)
 
-    val updated = catalog.alterTable(testIdent,
+    catalog.alterTable(testIdent,
       TableChange.addColumn(Array("point", "z"), DoubleType))
+    val updated = catalog.loadTable(testIdent)
 
     val expectedSchema = schema.add("point", pointStruct.add("z", DoubleType))
 
@@ -386,7 +418,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: add column to primitive field fails") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
@@ -404,7 +437,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: add field to missing column fails") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
@@ -420,11 +454,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: update column data type") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
-    val updated = catalog.alterTable(testIdent, TableChange.updateColumnType(Array("id"), LongType))
+    catalog.alterTable(testIdent, TableChange.updateColumnType(Array("id"), LongType))
+    val updated = catalog.loadTable(testIdent)
 
     val expectedSchema = new StructType().add("id", LongType).add("data", StringType)
     assert(updated.schema == expectedSchema)
@@ -436,12 +472,14 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val originalSchema = new StructType()
         .add("id", IntegerType, nullable = false)
         .add("data", StringType)
-    val table = catalog.createTable(testIdent, originalSchema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, originalSchema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == originalSchema)
 
-    val updated = catalog.alterTable(testIdent,
+    catalog.alterTable(testIdent,
       TableChange.updateColumnNullability(Array("id"), true))
+    val updated = catalog.loadTable(testIdent)
 
     val expectedSchema = new StructType().add("id", IntegerType).add("data", StringType)
     assert(updated.schema == expectedSchema)
@@ -450,7 +488,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: update missing column fails") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
@@ -466,12 +505,14 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: add comment") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
-    val updated = catalog.alterTable(testIdent,
+    catalog.alterTable(testIdent,
       TableChange.updateColumnComment(Array("id"), "comment text"))
+    val updated = catalog.loadTable(testIdent)
 
     val expectedSchema = new StructType()
         .add("id", IntegerType, nullable = true, "comment text")
@@ -482,7 +523,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: replace comment") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
@@ -492,8 +534,9 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
         .add("id", IntegerType, nullable = true, "replacement comment")
         .add("data", StringType)
 
-    val updated = catalog.alterTable(testIdent,
+    catalog.alterTable(testIdent,
       TableChange.updateColumnComment(Array("id"), "replacement comment"))
+    val updated = catalog.loadTable(testIdent)
 
     assert(updated.schema == expectedSchema)
   }
@@ -501,7 +544,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: add comment to missing column fails") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
@@ -517,11 +561,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: rename top-level column") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
-    val updated = catalog.alterTable(testIdent, TableChange.renameColumn(Array("id"), "some_id"))
+    catalog.alterTable(testIdent, TableChange.renameColumn(Array("id"), "some_id"))
+    val updated = catalog.loadTable(testIdent)
 
     val expectedSchema = new StructType().add("some_id", IntegerType).add("data", StringType)
 
@@ -534,12 +580,14 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val pointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
     val tableSchema = schema.add("point", pointStruct)
 
-    val table = catalog.createTable(testIdent, tableSchema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, tableSchema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == tableSchema)
 
-    val updated = catalog.alterTable(testIdent,
+    catalog.alterTable(testIdent,
       TableChange.renameColumn(Array("point", "x"), "first"))
+    val updated = catalog.loadTable(testIdent)
 
     val newPointStruct = new StructType().add("first", DoubleType).add("y", DoubleType)
     val expectedSchema = schema.add("point", newPointStruct)
@@ -553,12 +601,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val pointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
     val tableSchema = schema.add("point", pointStruct)
 
-    val table = catalog.createTable(testIdent, tableSchema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, tableSchema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == tableSchema)
 
-    val updated = catalog.alterTable(testIdent,
-      TableChange.renameColumn(Array("point"), "p"))
+    catalog.alterTable(testIdent, TableChange.renameColumn(Array("point"), "p"))
+    val updated = catalog.loadTable(testIdent)
 
     val newPointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
     val expectedSchema = schema.add("p", newPointStruct)
@@ -569,7 +618,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: rename missing column fails") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
@@ -588,13 +638,15 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val pointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
     val tableSchema = schema.add("point", pointStruct)
 
-    val table = catalog.createTable(testIdent, tableSchema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, tableSchema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == tableSchema)
 
-    val updated = catalog.alterTable(testIdent,
+    catalog.alterTable(testIdent,
       TableChange.renameColumn(Array("point", "x"), "first"),
       TableChange.renameColumn(Array("point", "y"), "second"))
+    val updated = catalog.loadTable(testIdent)
 
     val newPointStruct = new StructType().add("first", DoubleType).add("second", DoubleType)
     val expectedSchema = schema.add("point", newPointStruct)
@@ -605,12 +657,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: delete top-level column") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
-    val updated = catalog.alterTable(testIdent,
-      TableChange.deleteColumn(Array("id"), false))
+    catalog.alterTable(testIdent, TableChange.deleteColumn(Array("id"), false))
+    val updated = catalog.loadTable(testIdent)
 
     val expectedSchema = new StructType().add("data", StringType)
     assert(updated.schema == expectedSchema)
@@ -622,12 +675,13 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val pointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
     val tableSchema = schema.add("point", pointStruct)
 
-    val table = catalog.createTable(testIdent, tableSchema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, tableSchema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == tableSchema)
 
-    val updated = catalog.alterTable(testIdent,
-      TableChange.deleteColumn(Array("point", "y"), false))
+    catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "y"), false))
+    val updated = catalog.loadTable(testIdent)
 
     val newPointStruct = new StructType().add("x", DoubleType)
     val expectedSchema = schema.add("point", newPointStruct)
@@ -638,7 +692,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: delete missing column fails") {
     val catalog = newCatalog()
 
-    val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == schema)
 
@@ -660,7 +715,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     val pointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
     val tableSchema = schema.add("point", pointStruct)
 
-    val table = catalog.createTable(testIdent, tableSchema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, tableSchema, emptyTrans, emptyProps)
+    val table = catalog.loadTable(testIdent)
 
     assert(table.schema == tableSchema)
 
@@ -683,8 +739,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.alterTable(testIdent, TableChange.setProperty("prop", "val"))
     }
 
-    assert(exc.message.contains(testIdent.quoted))
-    assert(exc.message.contains("not found"))
+    checkErrorTableNotFound(exc, testIdentQuoted)
   }
 
   test("alterTable: location") {
@@ -692,23 +747,27 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(!catalog.tableExists(testIdent))
 
     // default location
-    val t1 = catalog.createTable(testIdent, schema, Array.empty, emptyProps).asInstanceOf[V1Table]
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    val t1 = catalog.loadTable(testIdent).asInstanceOf[V1Table]
     assert(t1.catalogTable.location ===
       spark.sessionState.catalog.defaultTablePath(testIdent.asTableIdentifier))
 
     // relative path
-    val t2 = catalog.alterTable(testIdent,
-      TableChange.setProperty(TableCatalog.PROP_LOCATION, "relative/path")).asInstanceOf[V1Table]
+    catalog.alterTable(testIdent,
+      TableChange.setProperty(TableCatalog.PROP_LOCATION, "relative/path"))
+    val t2 = catalog.loadTable(testIdent).asInstanceOf[V1Table]
     assert(t2.catalogTable.location === makeQualifiedPathWithWarehouse("db.db/relative/path"))
 
     // absolute path without scheme
-    val t3 = catalog.alterTable(testIdent,
-      TableChange.setProperty(TableCatalog.PROP_LOCATION, "/absolute/path")).asInstanceOf[V1Table]
+    catalog.alterTable(testIdent,
+      TableChange.setProperty(TableCatalog.PROP_LOCATION, "/absolute/path"))
+    val t3 = catalog.loadTable(testIdent).asInstanceOf[V1Table]
     assert(t3.catalogTable.location.toString === "file:///absolute/path")
 
     // absolute path with scheme
-    val t4 = catalog.alterTable(testIdent, TableChange.setProperty(
-      TableCatalog.PROP_LOCATION, "file:/absolute/path")).asInstanceOf[V1Table]
+    catalog.alterTable(testIdent, TableChange.setProperty(
+      TableCatalog.PROP_LOCATION, "file:/absolute/path"))
+    val t4 = catalog.loadTable(testIdent).asInstanceOf[V1Table]
     assert(t4.catalogTable.location.toString === "file:/absolute/path")
   }
 
@@ -717,7 +776,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
     assert(!catalog.tableExists(testIdent))
 
-    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
 
     assert(catalog.tableExists(testIdent))
 
@@ -744,7 +803,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(!catalog.tableExists(testIdent))
     assert(!catalog.tableExists(testIdentNew))
 
-    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
 
     assert(catalog.tableExists(testIdent))
     catalog.renameTable(testIdent, testIdentNew)
@@ -760,7 +819,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.renameTable(testIdent, testIdentNew)
     }
 
-    assert(exc.message.contains("Table or view 'test_table' not found in database 'db'"))
+    checkErrorTableNotFound(exc, testIdentQuoted)
   }
 
   test("renameTable: fail if new table name already exists") {
@@ -769,8 +828,8 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(!catalog.tableExists(testIdent))
     assert(!catalog.tableExists(testIdentNew))
 
-    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
-    catalog.createTable(testIdentNew, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
+    catalog.createTable(testIdentNew, schema, emptyTrans, emptyProps)
 
     assert(catalog.tableExists(testIdent))
     assert(catalog.tableExists(testIdentNew))
@@ -779,8 +838,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
       catalog.renameTable(testIdent, testIdentNew)
     }
 
-    assert(exc.message.contains(testIdentNew.quoted))
-    assert(exc.message.contains("already exists"))
+    checkErrorTableAlreadyExists(exc, testIdentNewQuoted)
   }
 
   test("renameTable: fail if db does not match for old and new table names") {
@@ -790,7 +848,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
     assert(!catalog.tableExists(testIdent))
     assert(!catalog.tableExists(testIdentNewOtherDb))
 
-    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
 
     assert(catalog.tableExists(testIdent))
 
@@ -820,7 +878,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     // remove location and comment that are automatically added by HMS unless they are expected
     val toRemove =
       CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filter(expected.contains)
-    assert(expected -- toRemove === actual)
+    assert(expected.toMap -- toRemove === actual)
   }
 
   test("listNamespaces: basic behavior") {
@@ -977,7 +1035,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     assert(catalog.namespaceExists(testNs) === false)
 
     val exc = intercept[NoSuchDatabaseException] {
-      catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+      catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
     }
 
     assert(exc.getMessage.contains(testNs.quoted))
@@ -1011,7 +1069,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     val catalog = newCatalog()
 
     catalog.createNamespace(testNs, Map("property" -> "value").asJava)
-    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdent, schema, emptyTrans, emptyProps)
 
     val exc = intercept[AnalysisException] {
       catalog.dropNamespace(testNs, cascade = false)
@@ -1113,5 +1171,23 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
     }
     catalog.dropNamespace(testNs, cascade = false)
+  }
+
+  test("IdentifierHelper should throw exception when identifier has more than 2 parts") {
+    val testIdent: IdentifierHelper = Identifier.of(Array("a", "b"), "c")
+    checkError(
+      exception = intercept[AnalysisException](testIdent.asTableIdentifier),
+      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      parameters = Map("identifier" -> "`a`.`b`.`c`")
+    )
+  }
+
+  test("MultipartIdentifierHelper should throw exception when identifier has more than 2 parts") {
+    val testIdent: MultipartIdentifierHelper = Seq("a", "b", "c")
+    checkError(
+      exception = intercept[AnalysisException](testIdent.asFunctionIdentifier),
+      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      parameters = Map("identifier" -> "`a`.`b`.`c`")
+    )
   }
 }

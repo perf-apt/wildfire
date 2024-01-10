@@ -62,7 +62,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
-    val immrprof = rprof.require(gpuExecReq).build
+    val immrprof = rprof.require(gpuExecReq).build()
     val error = intercept[SparkException] {
       rpmanager.isSupported(immrprof)
     }.getMessage()
@@ -82,7 +82,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
-    val immrprof = rprof.require(gpuExecReq).build
+    val immrprof = rprof.require(gpuExecReq).build()
     assert(rpmanager.isSupported(immrprof) == true)
   }
 
@@ -97,7 +97,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript", "nvidia")
-    val immrprof = rprof.require(gpuExecReq).build
+    val immrprof = rprof.require(gpuExecReq).build()
     assert(rpmanager.isSupported(immrprof) == true)
   }
 
@@ -116,6 +116,59 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     assert(rpmanager.isSupported(immrprof))
   }
 
+  test("isSupported task resource profiles with dynamic allocation disabled") {
+    val conf = new SparkConf().setMaster("spark://foo").set(EXECUTOR_CORES, 4)
+    conf.set(DYN_ALLOCATION_ENABLED, false)
+    conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
+
+    var rpmanager = new ResourceProfileManager(conf, listenerBus)
+    // default profile should always work
+    val defaultProf = rpmanager.defaultResourceProfile
+    assert(rpmanager.isSupported(defaultProf))
+
+    // Standalone: supports task resource profile.
+    val gpuTaskReq = new TaskResourceRequests().resource("gpu", 1)
+    val taskProf = new TaskResourceProfile(gpuTaskReq.requests)
+    assert(rpmanager.isSupported(taskProf))
+
+    // Local: doesn't support task resource profile.
+    conf.setMaster("local")
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
+    val error = intercept[SparkException] {
+      rpmanager.isSupported(taskProf)
+    }.getMessage
+    assert(error === "TaskResourceProfiles are only supported for Standalone, " +
+      "Yarn and Kubernetes cluster for now when dynamic allocation is disabled.")
+
+    // Local cluster: supports task resource profile.
+    conf.setMaster("local-cluster[1, 1, 1024]")
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
+    assert(rpmanager.isSupported(taskProf))
+
+    // Yarn: supports task resource profile.
+    conf.setMaster("yarn")
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
+    assert(rpmanager.isSupported(taskProf))
+
+    // K8s: supports task resource profile.
+    conf.setMaster("k8s://foo")
+    rpmanager = new ResourceProfileManager(conf, listenerBus)
+    assert(rpmanager.isSupported(taskProf))
+  }
+
+  test("isSupported task resource profiles with dynamic allocation enabled") {
+    val conf = new SparkConf().setMaster("spark://foo").set(EXECUTOR_CORES, 4)
+    conf.set(DYN_ALLOCATION_ENABLED, true)
+    conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
+
+    val rpmanager = new ResourceProfileManager(conf, listenerBus)
+
+    // task resource profile.
+    val gpuTaskReq = new TaskResourceRequests().resource("gpu", 1)
+    val taskProf = new TaskResourceProfile(gpuTaskReq.requests)
+    assert(rpmanager.isSupported(taskProf))
+  }
+
   test("isSupported with local mode") {
     val conf = new SparkConf().setMaster("local").set(EXECUTOR_CORES, 4)
     conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")
@@ -125,7 +178,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
-    val immrprof = rprof.require(gpuExecReq).build
+    val immrprof = rprof.require(gpuExecReq).build()
     val error = intercept[SparkException] {
       rpmanager.isSupported(immrprof)
     }.getMessage()
@@ -147,11 +200,11 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
       val treqs = new TaskResourceRequests()
       treqs.cpus(i)
       rprofBuilder.require(ereqs).require(treqs)
-      val rprof = rprofBuilder.build
+      val rprof = rprofBuilder.build()
       rpmanager.addResourceProfile(rprof)
       if (i == checkId) rpAlreadyExist = Some(rprof)
     }
-    val rpNotMatch = new ResourceProfileBuilder().build
+    val rpNotMatch = new ResourceProfileBuilder().build()
     assert(rpmanager.getEquivalentProfile(rpNotMatch).isEmpty,
       s"resourceProfile should not have existed")
 
@@ -161,7 +214,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val treqs = new TaskResourceRequests()
     treqs.cpus(checkId)
     rprofBuilder.require(ereqs).require(treqs)
-    val rpShouldMatch = rprofBuilder.build
+    val rpShouldMatch = rprofBuilder.build()
 
     val equivProf = rpmanager.getEquivalentProfile(rpShouldMatch)
     assert(equivProf.nonEmpty)

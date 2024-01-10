@@ -28,15 +28,20 @@ import org.apache.commons.codec.digest.MessageDigestAlgorithms
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the expressions for hashing.
@@ -268,15 +273,14 @@ abstract class HashExpression[E] extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName requires at least one argument")
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 0"), children.length
+      )
     } else if (children.exists(child => hasMapType(child.dataType)) &&
         !SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_HASH_ON_MAPTYPE)) {
-      TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName cannot contain elements of MapType. In Spark, same maps " +
-          "may have different hashcode, thus hash expressions are prohibited on MapType elements." +
-          s" To restore previous behavior set ${SQLConf.LEGACY_ALLOW_HASH_ON_MAPTYPE.key} " +
-          "to true.")
+      DataTypeMismatch(
+        errorSubClass = "HASH_MAP_TYPE",
+        messageParameters = Map("functionName" -> toSQLId(prettyName)))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -300,13 +304,13 @@ abstract class HashExpression[E] extends Expression {
 
     val childrenHash = children.map { child =>
       val childGen = child.genCode(ctx)
-      childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
+      childGen.code.toString + ctx.nullSafeExec(child.nullable, childGen.isNull) {
         computeHash(childGen.value, child.dataType, ev.value, ctx)
       }
     }
 
     val hashResultType = CodeGenerator.javaType(dataType)
-    val typedSeed = if (dataType.sameType(LongType)) s"${seed}L" else s"$seed"
+    val typedSeed = if (DataTypeUtils.sameType(dataType, LongType)) s"${seed}L" else s"$seed"
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = childrenHash,
       funcName = "computeHash",
@@ -453,7 +457,7 @@ abstract class HashExpression[E] extends Expression {
     }
     val hashResultType = CodeGenerator.javaType(dataType)
     val code = ctx.splitExpressions(
-      expressions = fieldsHash,
+      expressions = fieldsHash.toImmutableArraySeq,
       funcName = "computeHashForStruct",
       arguments = Seq("InternalRow" -> tmpInput, hashResultType -> result),
       returnType = hashResultType,
@@ -643,7 +647,8 @@ object Murmur3HashFunction extends InterpretedHashFunction {
  * A xxHash64 64-bit hash expression.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2, ...) - Returns a 64-bit hash value of the arguments.",
+  usage = "_FUNC_(expr1, expr2, ...) - Returns a 64-bit hash value of the arguments. " +
+    "Hash seed is 42.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
@@ -853,7 +858,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
     }
 
     val code = ctx.splitExpressions(
-      expressions = fieldsHash,
+      expressions = fieldsHash.toImmutableArraySeq,
       funcName = "computeHashForStruct",
       arguments = Seq("InternalRow" -> tmpInput, CodeGenerator.JAVA_INT -> result),
       returnType = CodeGenerator.JAVA_INT,

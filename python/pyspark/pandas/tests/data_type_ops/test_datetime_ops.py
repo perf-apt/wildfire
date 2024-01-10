@@ -24,7 +24,7 @@ from pyspark import pandas as ps
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class DatetimeOpsTest(OpsTestBase):
+class DatetimeOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series(pd.date_range("1994-1-31 10:30:15", periods=3, freq="D"))
@@ -180,7 +180,7 @@ class DatetimeOpsTest(OpsTestBase):
         data = pd.date_range("1994-1-31 10:30:15", periods=3, freq="M")
         pser = pd.Series(data)
         psser = ps.Series(data)
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -236,10 +236,14 @@ class DatetimeOpsTest(OpsTestBase):
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
 
 
-class DatetimeNTZOpsTest(DatetimeOpsTest):
+class DatetimeOpsTests(DatetimeOpsTestsMixin, OpsTestBase):
+    pass
+
+
+class DatetimeNTZOpsTest(DatetimeOpsTests):
     @classmethod
     def setUpClass(cls):
-        super(DatetimeOpsTest, cls).setUpClass()
+        super(DatetimeOpsTests, cls).setUpClass()
         cls.spark.conf.set("spark.sql.timestampType", "timestamp_ntz")
 
 
@@ -248,7 +252,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.data_type_ops.test_datetime_ops import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

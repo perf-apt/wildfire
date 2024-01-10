@@ -2,191 +2,191 @@
 ORC Write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Write 100M rows:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter                              18682          18792         156          5.4         186.8       1.0X
-With bloom filter                                 21347          21396          69          4.7         213.5       0.9X
+Without bloom filter                               7480           7530          71         13.4          74.8       1.0X
+With bloom filter                                  9379           9542         230         10.7          93.8       0.8X
 
 
 ================================================================================================
 ORC Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 2097152           1656           1666          14         60.4          16.6       1.0X
-With bloom filter, blocksize: 2097152              1203           1230          37         83.1          12.0       1.4X
+Without bloom filter, blocksize: 2097152           1241           1323         116         80.6          12.4       1.0X
+With bloom filter, blocksize: 2097152               877            888          13        114.1           8.8       1.4X
 
 
 ================================================================================================
 ORC Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 4194304           1625           1632          10         61.6          16.2       1.0X
-With bloom filter, blocksize: 4194304              1224           1284          85         81.7          12.2       1.3X
+Without bloom filter, blocksize: 4194304           1320           1323           3         75.7          13.2       1.0X
+With bloom filter, blocksize: 4194304               877            878           2        114.0           8.8       1.5X
 
 
 ================================================================================================
 ORC Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 6291456           1599           1601           3         62.5          16.0       1.0X
-With bloom filter, blocksize: 6291456              1162           1179          24         86.0          11.6       1.4X
+Without bloom filter, blocksize: 6291456           1316           1329          18         76.0          13.2       1.0X
+With bloom filter, blocksize: 6291456               862            870          11        115.9           8.6       1.5X
 
 
 ================================================================================================
 ORC Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 8388608           1623           1638          21         61.6          16.2       1.0X
-With bloom filter, blocksize: 8388608              1181           1197          23         84.7          11.8       1.4X
+Without bloom filter, blocksize: 8388608           1312           1327          22         76.2          13.1       1.0X
+With bloom filter, blocksize: 8388608               858            867          10        116.5           8.6       1.5X
 
 
 ================================================================================================
 ORC Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 12582912           1631           1643          18         61.3          16.3       1.0X
-With bloom filter, blocksize: 12582912              1159           1183          34         86.3          11.6       1.4X
+Without bloom filter, blocksize: 12582912           1285           1288           5         77.8          12.8       1.0X
+With bloom filter, blocksize: 12582912               837            864          45        119.5           8.4       1.5X
 
 
 ================================================================================================
 ORC Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 16777216           1586           1597          16         63.0          15.9       1.0X
-With bloom filter, blocksize: 16777216              1170           1175           7         85.5          11.7       1.4X
+Without bloom filter, blocksize: 16777216           1287           1298          16         77.7          12.9       1.0X
+With bloom filter, blocksize: 16777216               854            861           7        117.1           8.5       1.5X
 
 
 ================================================================================================
 ORC Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 33554432           1646           1649           4         60.8          16.5       1.0X
-With bloom filter, blocksize: 33554432              1186           1187           1         84.3          11.9       1.4X
+Without bloom filter, blocksize: 33554432           1277           1278           1         78.3          12.8       1.0X
+With bloom filter, blocksize: 33554432               860            861           2        116.3           8.6       1.5X
 
 
 ================================================================================================
 Parquet Write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Write 100M rows:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter                              16633          16773         197          6.0         166.3       1.0X
-With bloom filter                                 23442          23538         136          4.3         234.4       0.7X
+Without bloom filter                              10016          10032          23         10.0         100.2       1.0X
+With bloom filter                                 13393          13536         203          7.5         133.9       0.7X
 
 
 ================================================================================================
 Parquet Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 2097152            955            965          13        104.7           9.6       1.0X
-With bloom filter, blocksize: 2097152               271            289          17        368.8           2.7       3.5X
+Without bloom filter, blocksize: 2097152            436            457          19        229.2           4.4       1.0X
+With bloom filter, blocksize: 2097152               150            168          12        667.9           1.5       2.9X
 
 
 ================================================================================================
 Parquet Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 4194304            897            907           9        111.4           9.0       1.0X
-With bloom filter, blocksize: 4194304               242            255          19        412.6           2.4       3.7X
+Without bloom filter, blocksize: 4194304            417            430           9        239.6           4.2       1.0X
+With bloom filter, blocksize: 4194304               116            125           7        861.1           1.2       3.6X
 
 
 ================================================================================================
 Parquet Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 6291456            923            934          11        108.3           9.2       1.0X
-With bloom filter, blocksize: 6291456               271            283          11        369.0           2.7       3.4X
+Without bloom filter, blocksize: 6291456            413            421           8        242.3           4.1       1.0X
+With bloom filter, blocksize: 6291456               124            132           7        806.5           1.2       3.3X
 
 
 ================================================================================================
 Parquet Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 8388608            916            920           3        109.1           9.2       1.0X
-With bloom filter, blocksize: 8388608               442            448           9        226.4           4.4       2.1X
+Without bloom filter, blocksize: 8388608            415            425          10        240.9           4.2       1.0X
+With bloom filter, blocksize: 8388608               221            225           4        452.2           2.2       1.9X
 
 
 ================================================================================================
 Parquet Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 12582912            899            917          15        111.2           9.0       1.0X
-With bloom filter, blocksize: 12582912               676            682           7        148.0           6.8       1.3X
+Without bloom filter, blocksize: 12582912            419            422           5        238.9           4.2       1.0X
+With bloom filter, blocksize: 12582912               309            315           5        323.9           3.1       1.4X
 
 
 ================================================================================================
 Parquet Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 16777216            894            913          17        111.8           8.9       1.0X
-With bloom filter, blocksize: 16777216               866            890          26        115.4           8.7       1.0X
+Without bloom filter, blocksize: 16777216            419            424           4        238.5           4.2       1.0X
+With bloom filter, blocksize: 16777216               337            345           8        296.3           3.4       1.2X
 
 
 ================================================================================================
 Parquet Read
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Read a row from 100M rows:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-Without bloom filter, blocksize: 33554432            896            921          22        111.6           9.0       1.0X
-With bloom filter, blocksize: 33554432               909            924          20        110.1           9.1       1.0X
+Without bloom filter, blocksize: 33554432            480            501          15        208.3           4.8       1.0X
+With bloom filter, blocksize: 33554432               430            444          16        232.5           4.3       1.1X
 
 

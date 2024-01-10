@@ -19,11 +19,12 @@ from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_C
 
 from py4j.java_gateway import JavaClass, JavaObject
 
-from pyspark import RDD, since
+from pyspark import RDD
 from pyspark.sql.column import _to_seq, _to_java_column, Column
 from pyspark.sql.types import StructType
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str
+from pyspark.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.streaming import StreamingQuery
 
-__all__ = ["DataFrameReader", "DataFrameWriter"]
+__all__ = ["DataFrameReader", "DataFrameWriter", "DataFrameWriterV2"]
 
 PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
@@ -60,6 +61,9 @@ class DataFrameReader(OptionUtils):
     to access this.
 
     .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
     """
 
     def __init__(self, spark: "SparkSession"):
@@ -76,6 +80,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         source : str
@@ -84,7 +91,7 @@ class DataFrameReader(OptionUtils):
         Examples
         --------
         >>> spark.read.format('json')
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Write a DataFrame into a JSON file and read it back.
 
@@ -115,6 +122,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         schema : :class:`pyspark.sql.types.StructType` or str
@@ -124,7 +134,7 @@ class DataFrameReader(OptionUtils):
         Examples
         --------
         >>> spark.read.schema("col0 INT, col1 DOUBLE")
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Specify the schema with reading a CSV file.
 
@@ -144,7 +154,13 @@ class DataFrameReader(OptionUtils):
         elif isinstance(schema, str):
             self._jreader = self._jreader.schema(schema)
         else:
-            raise TypeError("schema should be StructType or string")
+            raise PySparkTypeError(
+                error_class="NOT_STR_OR_STRUCT",
+                message_parameters={
+                    "arg_name": "schema",
+                    "arg_type": type(schema).__name__,
+                },
+            )
         return self
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameReader":
@@ -152,6 +168,9 @@ class DataFrameReader(OptionUtils):
         Adds an input option for the underlying data source.
 
         .. versionadded:: 1.5.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -162,10 +181,8 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
-        >>> from pyspark.sql import SparkSession
-        >>> spark = SparkSession.builder.master("local").getOrCreate()
         >>> spark.read.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Specify the option 'nullValue' with reading a CSV file.
 
@@ -181,7 +198,7 @@ class DataFrameReader(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|null|
+        |100|NULL|
         +---+----+
         """
         self._jreader = self._jreader.option(key, to_str(value))
@@ -193,6 +210,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         **options : dict
@@ -200,8 +220,13 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
-        >>> spark.read.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        >>> spark.read.options(key="value")
+        <...readwriter.DataFrameReader object ...>
+
+        Specify options in a dictionary.
+
+        >>> spark.read.options(**{"k1": "v1", "k2": "v2"})
+        <...readwriter.DataFrameReader object ...>
 
         Specify the option 'nullValue' and 'header' with reading a CSV file.
 
@@ -220,7 +245,7 @@ class DataFrameReader(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|null|
+        |100|NULL|
         +---+----+
         """
         for k in options:
@@ -237,6 +262,9 @@ class DataFrameReader(OptionUtils):
         """Loads data from a data source and returns it as a :class:`DataFrame`.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -272,7 +300,7 @@ class DataFrameReader(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|null|
+        |100|NULL|
         +---+----+
         """
         if format is not None:
@@ -329,6 +357,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         path : str, list or :class:`RDD`
@@ -343,28 +374,65 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
         Examples
         --------
-        Write a DataFrame into a JSON file and read it back.
+        Example 1: Write a DataFrame into a JSON file and read it back.
 
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
-        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...         [{"age": 100, "name": "Hyukjin"}]
         ...     ).write.mode("overwrite").format("json").save(d)
         ...
         ...     # Read the JSON file as a DataFrame.
         ...     spark.read.json(d).show()
-        +---+------------+
-        |age|        name|
-        +---+------------+
-        |100|Hyukjin Kwon|
-        +---+------------+
+        +---+-------+
+        |age|   name|
+        +---+-------+
+        |100|Hyukjin|
+        +---+-------+
+
+        Example 2: Read JSON from multiple files in a directory
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
+        ...     # Write a DataFrame into a JSON file
+        ...     spark.createDataFrame(
+        ...         [{"age": 30, "name": "Bob"}]
+        ...     ).write.mode("overwrite").format("json").save(d1)
+        ...
+        ...     # Read the JSON files as a DataFrame.
+        ...     spark.createDataFrame(
+        ...         [{"age": 25, "name": "Alice"}]
+        ...     ).write.mode("overwrite").format("json").save(d2)
+        ...     spark.read.json([d1, d2]).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 25|Alice|
+        | 30|  Bob|
+        +---+-----+
+
+        Example 3: Read JSON with a custom schema
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a JSON file
+        ...     spark.createDataFrame(
+        ...        [{"age": 30, "name": "Bob"}]
+        ...     ).write.mode("overwrite").format("json").save(d)
+        ...     custom_schema = "name STRING, age INT"
+        ...     spark.read.json(d, schema=custom_schema).show()
+        +----+---+
+        |name|age|
+        +----+---+
+        | Bob| 30|
+        +----+---+
         """
         self._set_opts(
             schema=schema,
@@ -413,12 +481,21 @@ class DataFrameReader(OptionUtils):
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             return self._df(self._jreader.json(jrdd))
         else:
-            raise TypeError("path can be only string, list or RDD")
+            raise PySparkTypeError(
+                error_class="NOT_STR_OR_LIST_OF_RDD",
+                message_parameters={
+                    "arg_name": "path",
+                    "arg_type": type(path).__name__,
+                },
+            )
 
     def table(self, tableName: str) -> "DataFrame":
         """Returns the specified table as a :class:`DataFrame`.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -454,37 +531,88 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         paths : str
+            One or more file paths to read the Parquet files from.
 
         Other Parameters
         ----------------
         **options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
+        Returns
+        -------
+        :class:`DataFrame`
+            A DataFrame containing the data from the Parquet files.
+
         Examples
         --------
+        Create sample dataframes.
+
+        >>> df = spark.createDataFrame(
+        ...     [(10, "Alice"), (15, "Bob"), (20, "Tom")], schema=["age", "name"])
+        >>> df2 = spark.createDataFrame([(70, "Alice"), (80, "Bob")], schema=["height", "name"])
+
         Write a DataFrame into a Parquet file and read it back.
 
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
-        ...     # Write a DataFrame into a Parquet file
-        ...     spark.createDataFrame(
-        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
-        ...     ).write.mode("overwrite").format("parquet").save(d)
+        ...     # Write a DataFrame into a Parquet file.
+        ...     df.write.mode("overwrite").format("parquet").save(d)
         ...
         ...     # Read the Parquet file as a DataFrame.
-        ...     spark.read.parquet(d).show()
-        +---+------------+
-        |age|        name|
-        +---+------------+
-        |100|Hyukjin Kwon|
-        +---+------------+
+        ...     spark.read.parquet(d).orderBy("name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 10|Alice|
+        | 15|  Bob|
+        | 20|  Tom|
+        +---+-----+
+
+        Read a Parquet file with a specific column.
+
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     df.write.mode("overwrite").format("parquet").save(d)
+        ...
+        ...     # Read the Parquet file with only the 'name' column.
+        ...     spark.read.schema("name string").parquet(d).orderBy("name").show()
+        +-----+
+        | name|
+        +-----+
+        |Alice|
+        |  Bob|
+        |  Tom|
+        +-----+
+
+        Read multiple Parquet files and merge schema.
+
+        >>> with tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
+        ...     df.write.mode("overwrite").format("parquet").save(d1)
+        ...     df2.write.mode("overwrite").format("parquet").save(d2)
+        ...
+        ...     spark.read.option(
+        ...         "mergeSchema", "true"
+        ...     ).parquet(d1, d2).select(
+        ...         "name", "age", "height"
+        ...     ).orderBy("name", "age").show()
+        +-----+----+------+
+        | name| age|height|
+        +-----+----+------+
+        |Alice|NULL|    70|
+        |Alice|  10|  NULL|
+        |  Bob|NULL|    80|
+        |  Bob|  15|  NULL|
+        |  Tom|  20|  NULL|
+        +-----+----+------+
         """
         mergeSchema = options.get("mergeSchema", None)
         pathGlobFilter = options.get("pathGlobFilter", None)
@@ -525,6 +653,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.6.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         paths : str or list
@@ -535,7 +666,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -618,6 +749,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         path : str or list
@@ -632,7 +766,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -651,7 +785,7 @@ class DataFrameReader(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|null|
+        |100|NULL|
         +---+----+
         """
         self._set_opts(
@@ -716,7 +850,136 @@ class DataFrameReader(OptionUtils):
             )
             return self._df(self._jreader.csv(jdataset))
         else:
-            raise TypeError("path can be only string, list or RDD")
+            raise PySparkTypeError(
+                error_class="NOT_STR_OR_LIST_OF_RDD",
+                message_parameters={
+                    "arg_name": "path",
+                    "arg_type": type(path).__name__,
+                },
+            )
+
+    def xml(
+        self,
+        path: Union[str, List[str], RDD[str]],
+        rowTag: Optional[str] = None,
+        schema: Optional[Union[StructType, str]] = None,
+        excludeAttribute: Optional[Union[bool, str]] = None,
+        attributePrefix: Optional[str] = None,
+        valueTag: Optional[str] = None,
+        ignoreSurroundingSpaces: Optional[Union[bool, str]] = None,
+        rowValidationXSDPath: Optional[str] = None,
+        ignoreNamespace: Optional[Union[bool, str]] = None,
+        wildcardColName: Optional[str] = None,
+        encoding: Optional[str] = None,
+        inferSchema: Optional[Union[bool, str]] = None,
+        nullValue: Optional[str] = None,
+        dateFormat: Optional[str] = None,
+        timestampFormat: Optional[str] = None,
+        mode: Optional[str] = None,
+        columnNameOfCorruptRecord: Optional[str] = None,
+        multiLine: Optional[Union[bool, str]] = None,
+        samplingRatio: Optional[Union[float, str]] = None,
+        locale: Optional[str] = None,
+    ) -> "DataFrame":
+        r"""Loads a XML file and returns the result as a  :class:`DataFrame`.
+
+        If the ``schema`` parameter is not specified, this function goes
+        through the input once to determine the input schema.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path : str, list or :class:`RDD`
+            string, or list of strings, for input path(s),
+            or RDD of Strings storing XML rows.
+        schema : :class:`pyspark.sql.types.StructType` or str, optional
+            an optional :class:`pyspark.sql.types.StructType` for the input schema
+            or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+            for the version you use.
+
+            .. # noqa
+
+        Examples
+        --------
+        Write a DataFrame into a XML file and read it back.
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a XML file
+        ...     spark.createDataFrame(
+        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...     ).write.mode("overwrite").option("rowTag", "person").format("xml").save(d)
+        ...
+        ...     # Read the XML file as a DataFrame.
+        ...     spark.read.option("rowTag", "person").xml(d).show()
+        +---+------------+
+        |age|        name|
+        +---+------------+
+        |100|Hyukjin Kwon|
+        +---+------------+
+        """
+        self._set_opts(
+            rowTag=rowTag,
+            schema=schema,
+            excludeAttribute=excludeAttribute,
+            attributePrefix=attributePrefix,
+            valueTag=valueTag,
+            ignoreSurroundingSpaces=ignoreSurroundingSpaces,
+            rowValidationXSDPath=rowValidationXSDPath,
+            ignoreNamespace=ignoreNamespace,
+            wildcardColName=wildcardColName,
+            encoding=encoding,
+            inferSchema=inferSchema,
+            nullValue=nullValue,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            mode=mode,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord,
+            multiLine=multiLine,
+            samplingRatio=samplingRatio,
+            locale=locale,
+        )
+        if isinstance(path, str):
+            path = [path]
+        if type(path) == list:
+            assert self._spark._sc._jvm is not None
+            return self._df(self._jreader.xml(self._spark._sc._jvm.PythonUtils.toSeq(path)))
+        elif isinstance(path, RDD):
+
+            def func(iterator: Iterable) -> Iterable:
+                for x in iterator:
+                    if not isinstance(x, str):
+                        x = str(x)
+                    if isinstance(x, str):
+                        x = x.encode("utf-8")
+                    yield x
+
+            keyed = path.mapPartitions(func)
+            keyed._bypass_serializer = True  # type: ignore[attr-defined]
+            assert self._spark._jvm is not None
+            jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
+            # There isn't any jvm api for creating a dataframe from rdd storing XML.
+            # We can do it through creating a jvm dataset first and using the jvm api
+            # for creating a dataframe from dataset storing XML.
+            jdataset = self._spark._jsparkSession.createDataset(
+                jrdd.rdd(), self._spark._jvm.Encoders.STRING()
+            )
+            return self._df(self._jreader.xml(jdataset))
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_STR_OR_LIST_OF_RDD",
+                message_parameters={
+                    "arg_name": "path",
+                    "arg_type": type(path).__name__,
+                },
+            )
 
     def orc(
         self,
@@ -731,6 +994,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.5.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         path : str or list
@@ -740,7 +1006,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -828,6 +1094,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         table : str
@@ -835,7 +1104,7 @@ class DataFrameReader(OptionUtils):
         column : str, optional
             alias of ``partitionColumn`` option. Refer to ``partitionColumn`` in
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
         predicates : list, optional
             a list of expressions suitable for inclusion in WHERE clauses;
             each one defines one partition of the :class:`DataFrame`
@@ -849,7 +1118,7 @@ class DataFrameReader(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -896,7 +1165,10 @@ class DataFrameWriter(OptionUtils):
     (e.g. file systems, key-value stores, etc). Use :attr:`DataFrame.write`
     to access this.
 
-    .. versionadded:: 1.4
+    .. versionadded:: 1.4.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
     """
 
     def __init__(self, df: "DataFrame"):
@@ -921,6 +1193,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Examples
         --------
         Raise an error when writing to an existing path.
@@ -929,10 +1204,10 @@ class DataFrameWriter(OptionUtils):
         >>> with tempfile.TemporaryDirectory() as d:
         ...     spark.createDataFrame(
         ...         [{"age": 80, "name": "Xinrong Meng"}]
-        ...     ).write.mode("error").format("parquet").save(d)
+        ...     ).write.mode("error").format("parquet").save(d) # doctest: +SKIP
         Traceback (most recent call last):
             ...
-        pyspark.sql.utils.AnalysisException: ...
+        ...AnalysisException: ...
 
         Write a Parquet file back with various options, and read it back.
 
@@ -972,6 +1247,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         source : str
@@ -980,7 +1258,7 @@ class DataFrameWriter(OptionUtils):
         Examples
         --------
         >>> spark.range(1).write.format('parquet')
-        <pyspark.sql.readwriter.DataFrameWriter object ...>
+        <...readwriter.DataFrameWriter object ...>
 
         Write a DataFrame into a Parquet file and read it back.
 
@@ -1004,9 +1282,12 @@ class DataFrameWriter(OptionUtils):
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameWriter":
         """
-        Adds a output option for the underlying data source.
+        Adds an output option for the underlying data source.
 
         .. versionadded:: 1.5.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1018,7 +1299,7 @@ class DataFrameWriter(OptionUtils):
         Examples
         --------
         >>> spark.range(1).write.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameWriter object ...>
+        <...readwriter.DataFrameWriter object ...>
 
         Specify the option 'nullValue' with writing a CSV file.
 
@@ -1046,23 +1327,36 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         **options : dict
-            The dictionary of string keys and prmitive-type values.
+            The dictionary of string keys and primitive-type values.
 
         Examples
         --------
-        >>> spark.range(1).write.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameWriter object ...>
+        >>> spark.range(1).write.options(key="value")
+        <...readwriter.DataFrameWriter object ...>
+
+        Specify options in a dictionary.
+
+        >>> spark.range(1).write.options(**{"k1": "v1", "k2": "v2"})
+        <...readwriter.DataFrameWriter object ...>
 
         Specify the option 'nullValue' and 'header' with writing a CSV file.
 
+        >>> from pyspark.sql.types import StructType,StructField, StringType, IntegerType
+        >>> schema = StructType([
+        ...     StructField("age",IntegerType(),True),
+        ...     StructField("name",StringType(),True),
+        ... ])
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Write a DataFrame into a CSV file with 'nullValue' option set to 'Hyukjin Kwon',
         ...     # and 'header' option set to `True`.
-        ...     df = spark.createDataFrame([(100, "Hyukjin Kwon")], ["age", "name"])
+        ...     df = spark.createDataFrame([(100, None)], schema=schema)
         ...     df.write.options(nullValue="Hyukjin Kwon", header=True).mode(
         ...         "overwrite").format("csv").save(d)
         ...
@@ -1093,6 +1387,9 @@ class DataFrameWriter(OptionUtils):
         to Hive's partitioning scheme.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1152,6 +1449,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 2.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         numBuckets : int
@@ -1189,16 +1489,42 @@ class DataFrameWriter(OptionUtils):
         >>> _ = spark.sql("DROP TABLE bucketed_table")
         """
         if not isinstance(numBuckets, int):
-            raise TypeError("numBuckets should be an int, got {0}.".format(type(numBuckets)))
+            raise PySparkTypeError(
+                error_class="NOT_INT",
+                message_parameters={
+                    "arg_name": "numBuckets",
+                    "arg_type": type(numBuckets).__name__,
+                },
+            )
 
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+                raise PySparkValueError(
+                    error_class="CANNOT_SET_TOGETHER",
+                    message_parameters={
+                        "arg_list": f"`col` of type {type(col).__name__} and `cols`",
+                    },
+                )
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 
-        if not all(isinstance(c, str) for c in cols) or not (isinstance(col, str)):
-            raise TypeError("all names should be `str`")
+        for c in cols:
+            if not isinstance(c, str):
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_STR",
+                    message_parameters={
+                        "arg_name": "cols",
+                        "arg_type": type(c).__name__,
+                    },
+                )
+        if not isinstance(col, str):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_STR",
+                message_parameters={
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
+            )
 
         self._jwrite = self._jwrite.bucketBy(
             numBuckets, col, _to_seq(self._spark._sc, cast(Iterable["ColumnOrName"], cols))
@@ -1219,6 +1545,9 @@ class DataFrameWriter(OptionUtils):
         """Sorts the output in each bucket by the given columns on the file system.
 
         .. versionadded:: 2.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1252,12 +1581,32 @@ class DataFrameWriter(OptionUtils):
         """
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+                raise PySparkValueError(
+                    error_class="CANNOT_SET_TOGETHER",
+                    message_parameters={
+                        "arg_list": f"`col` of type {type(col).__name__} and `cols`",
+                    },
+                )
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 
-        if not all(isinstance(c, str) for c in cols) or not (isinstance(col, str)):
-            raise TypeError("all names should be `str`")
+        for c in cols:
+            if not isinstance(c, str):
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_STR",
+                    message_parameters={
+                        "arg_name": "cols",
+                        "arg_type": type(c).__name__,
+                    },
+                )
+        if not isinstance(col, str):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_STR",
+                message_parameters={
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
+            )
 
         self._jwrite = self._jwrite.sortBy(
             col, _to_seq(self._spark._sc, cast(Iterable["ColumnOrName"], cols))
@@ -1279,6 +1628,9 @@ class DataFrameWriter(OptionUtils):
         ``spark.sql.sources.default`` will be used.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1335,6 +1687,9 @@ class DataFrameWriter(OptionUtils):
         schema of the table.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1397,11 +1752,14 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Notes
         -----
         When `mode` is `Append`, if there is an existing table, we will use the format and
         options of the existing table. The column order in the schema of the :class:`DataFrame`
-        doesn't need to be same as that of the existing table. Unlike
+        doesn't need to be the same as that of the existing table. Unlike
         :meth:`DataFrameWriter.insertInto`, :meth:`DataFrameWriter.saveAsTable` will use the
         column names to find the correct column positions.
 
@@ -1462,6 +1820,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -1480,7 +1841,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1525,6 +1886,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -1545,7 +1909,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1582,6 +1946,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.6.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -1592,7 +1959,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1649,6 +2016,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         path : str
@@ -1667,7 +2037,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1687,7 +2057,7 @@ class DataFrameWriter(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|null|
+        |100|NULL|
         +---+----+
         """
         self.mode(mode)
@@ -1711,6 +2081,83 @@ class DataFrameWriter(OptionUtils):
         )
         self._jwrite.csv(path)
 
+    def xml(
+        self,
+        path: str,
+        rowTag: Optional[str] = None,
+        mode: Optional[str] = None,
+        attributePrefix: Optional[str] = None,
+        valueTag: Optional[str] = None,
+        rootTag: Optional[str] = None,
+        declaration: Optional[bool] = None,
+        arrayElementName: Optional[str] = None,
+        nullValue: Optional[str] = None,
+        dateFormat: Optional[str] = None,
+        timestampFormat: Optional[str] = None,
+        compression: Optional[str] = None,
+        encoding: Optional[str] = None,
+    ) -> None:
+        r"""Saves the content of the :class:`DataFrame` in XML format at the specified path.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path : str
+            the path in any Hadoop supported file system
+        mode : str, optional
+            specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+            for the version you use.
+
+            .. # noqa
+
+        Examples
+        --------
+        Write a DataFrame into a XML file and read it back.
+
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     # Write a DataFrame into a XML file
+        ...     spark.createDataFrame(
+        ...         [{"age": 100, "name": "Hyukjin Kwon"}]
+        ...     ).write.mode("overwrite").option("rowTag", "person").xml(d)
+        ...
+        ...     # Read the XML file as a DataFrame.
+        ...     spark.read.option("rowTag", "person").format("xml").load(d).show()
+        +---+------------+
+        |age|        name|
+        +---+------------+
+        |100|Hyukjin Kwon|
+        +---+------------+
+        """
+        self.mode(mode)
+        self._set_opts(
+            rowTag=rowTag,
+            attributePrefix=attributePrefix,
+            valueTag=valueTag,
+            rootTag=rootTag,
+            declaration=declaration,
+            arrayElementName=arrayElementName,
+            nullValue=nullValue,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            compression=compression,
+            encoding=encoding,
+        )
+        self._jwrite.xml(path)
+
     def orc(
         self,
         path: str,
@@ -1721,6 +2168,9 @@ class DataFrameWriter(OptionUtils):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 
         .. versionadded:: 1.5.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1742,7 +2192,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1782,6 +2232,9 @@ class DataFrameWriter(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         table : str
@@ -1804,7 +2257,7 @@ class DataFrameWriter(OptionUtils):
         Extra options
             For the extra options, refer to
             `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option>`_
-            in the version you use.
+            for the version you use.
 
             .. # noqa
 
@@ -1832,6 +2285,9 @@ class DataFrameWriterV2:
     to external storage using the v2 API.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
     """
 
     def __init__(self, df: "DataFrame", table: str):
@@ -1839,41 +2295,44 @@ class DataFrameWriterV2:
         self._spark = df.sparkSession
         self._jwriter = df._jdf.writeTo(table)
 
-    @since(3.1)
     def using(self, provider: str) -> "DataFrameWriterV2":
         """
         Specifies a provider for the underlying output data source.
         Spark's default catalog supports "parquet", "json", etc.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.using(provider)
         return self
 
-    @since(3.1)
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameWriterV2":
         """
         Add a write option.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.option(key, to_str(value))
         return self
 
-    @since(3.1)
     def options(self, **options: "OptionalPrimitiveType") -> "DataFrameWriterV2":
         """
         Add write options.
+
+        .. versionadded: 3.1.0
         """
         options = {k: to_str(v) for k, v in options.items()}
         self._jwriter.options(options)
         return self
 
-    @since(3.1)
     def tableProperty(self, property: str, value: str) -> "DataFrameWriterV2":
         """
         Add table property.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.tableProperty(property, value)
         return self
 
-    @since(3.1)
     def partitionedBy(self, col: Column, *cols: Column) -> "DataFrameWriterV2":
         """
         Partition the output table created by `create`, `createOrReplace`, or `replace` using
@@ -1900,33 +2359,35 @@ class DataFrameWriterV2:
         * :py:func:`pyspark.sql.functions.hours`
         * :py:func:`pyspark.sql.functions.bucket`
 
+        .. versionadded: 3.1.0
         """
         col = _to_java_column(col)
         cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
         self._jwriter.partitionedBy(col, cols)
         return self
 
-    @since(3.1)
     def create(self) -> None:
         """
         Create a new table from the contents of the data frame.
 
         The new table's schema, partition layout, properties, and other configuration will be
         based on the configuration set on this writer.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.create()
 
-    @since(3.1)
     def replace(self) -> None:
         """
         Replace an existing table with the contents of the data frame.
 
         The existing table's schema, partition layout, properties, and other configuration will be
         replaced with the contents of the data frame and the configuration set on this writer.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.replace()
 
-    @since(3.1)
     def createOrReplace(self) -> None:
         """
         Create a new table or replace an existing table with the contents of the data frame.
@@ -1935,26 +2396,29 @@ class DataFrameWriterV2:
         and other configuration will be based on the contents of the data frame
         and the configuration set on this writer.
         If the table exists, its configuration and data will be replaced.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.createOrReplace()
 
-    @since(3.1)
     def append(self) -> None:
         """
         Append the contents of the data frame to the output table.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.append()
 
-    @since(3.1)
     def overwrite(self, condition: Column) -> None:
         """
         Overwrite rows matching the given filter condition with the contents of the data frame in
         the output table.
+
+        .. versionadded: 3.1.0
         """
         condition = _to_java_column(condition)
         self._jwriter.overwrite(condition)
 
-    @since(3.1)
     def overwritePartitions(self) -> None:
         """
         Overwrite all partition for which the data frame contains at least one row with the contents
@@ -1962,6 +2426,8 @@ class DataFrameWriterV2:
 
         This operation is equivalent to Hive's `INSERT OVERWRITE ... PARTITION`, which replaces
         partitions dynamically depending on the contents of the data frame.
+
+        .. versionadded: 3.1.0
         """
         self._jwriter.overwritePartitions()
 

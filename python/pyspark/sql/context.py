@@ -34,14 +34,15 @@ from typing import (
 
 from py4j.java_gateway import JavaObject
 
-from pyspark import since, _NoValue
+from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.udf import UDFRegistration  # noqa: F401
-from pyspark.sql.utils import install_exception_handler
+from pyspark.sql.udtf import UDTFRegistration
+from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
 from pyspark.sql.types import AtomicType, DataType, StructType
@@ -58,14 +59,13 @@ if TYPE_CHECKING:
 __all__ = ["SQLContext", "HiveContext"]
 
 
-# TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
 class SQLContext:
     """The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
 
     As of Spark 2.0, this is replaced by :class:`SparkSession`. However, we are keeping the class
     here for backward compatibility.
 
-    A SQLContext can be used create :class:`DataFrame`, register :class:`DataFrame` as
+    A SQLContext can be used to create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
 
     .. deprecated:: 3.0.0
@@ -164,7 +164,6 @@ class SQLContext:
     def _get_or_create(
         cls: Type["SQLContext"], sc: SparkContext, **static_conf: Any
     ) -> "SQLContext":
-
         if (
             cls._instantiatedContext is None
             or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[union-attr]
@@ -191,9 +190,11 @@ class SQLContext:
 
         .. versionadded:: 1.3.0
         """
-        self.sparkSession.conf.set(key, value)  # type: ignore[arg-type]
+        self.sparkSession.conf.set(key, value)
 
-    def getConf(self, key: str, defaultValue: Union[Optional[str], _NoValueType] = _NoValue) -> str:
+    def getConf(
+        self, key: str, defaultValue: Union[Optional[str], _NoValueType] = _NoValue
+    ) -> Optional[str]:
         """Returns the value of Spark SQL configuration property for the given key.
 
         If the key is not set and defaultValue is set, return
@@ -225,6 +226,18 @@ class SQLContext:
         :class:`UDFRegistration`
         """
         return self.sparkSession.udf
+
+    @property
+    def udtf(self) -> UDTFRegistration:
+        """Returns a :class:`UDTFRegistration` for UDTF registration.
+
+        .. versionadded:: 3.5.0
+
+        Returns
+        -------
+        :class:`UDTFRegistration`
+        """
+        return self.sparkSession.udtf
 
     def range(
         self,
@@ -298,24 +311,6 @@ class SQLContext:
         )
         return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
 
-    # TODO(andrew): delete this once we refactor things to take in SparkSession
-    def _inferSchema(self, rdd: RDD, samplingRatio: Optional[float] = None) -> StructType:
-        """
-        Infer schema from an RDD of Row or tuple.
-
-        Parameters
-        ----------
-        rdd : :class:`RDD`
-            an RDD of Row or tuple
-        samplingRatio : float, optional
-            sampling ratio, or no sampling (default)
-
-        Returns
-        -------
-        :class:`pyspark.sql.types.StructType`
-        """
-        return self.sparkSession._inferSchema(rdd, samplingRatio)
-
     @overload
     def createDataFrame(
         self,
@@ -385,7 +380,7 @@ class SQLContext:
         :class:`pyspark.sql.types.StructType` as its only field, and the field name will be "value",
         each record will also be wrapped into a tuple, which can be converted to row later.
 
-        If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
+        If schema inference is needed, ``samplingRatio`` is used to determine the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
         .. versionadded:: 1.3.0
@@ -619,19 +614,28 @@ class SQLContext:
         else:
             return [name for name in self._ssql_ctx.tableNames(dbName)]
 
-    @since(1.0)
     def cacheTable(self, tableName: str) -> None:
-        """Caches the specified table in-memory."""
+        """
+        Caches the specified table in-memory.
+
+        .. versionadded:: 1.0.0
+        """
         self._ssql_ctx.cacheTable(tableName)
 
-    @since(1.0)
     def uncacheTable(self, tableName: str) -> None:
-        """Removes the specified table from the in-memory cache."""
+        """
+        Removes the specified table from the in-memory cache.
+
+        .. versionadded:: 1.0.0
+        """
         self._ssql_ctx.uncacheTable(tableName)
 
-    @since(1.3)
     def clearCache(self) -> None:
-        """Removes all cached tables from the in-memory cache."""
+        """
+        Removes all cached tables from the in-memory cache.
+
+        .. versionadded:: 1.3.0
+        """
         self._ssql_ctx.clearCache()
 
     @property
@@ -686,7 +690,6 @@ class SQLContext:
         return StreamingQueryManager(self._ssql_ctx.streams())
 
 
-# TODO: ignore[attr-defined] will be removed, once SparkContext is inlined
 class HiveContext(SQLContext):
     """A variant of Spark SQL that integrates with data stored in Hive.
 
@@ -749,7 +752,7 @@ class HiveContext(SQLContext):
         return cls(sparkContext, jtestHive)
 
     def refreshTable(self, tableName: str) -> None:
-        """Invalidate and refresh all the cached the metadata of the given
+        """Invalidate and refresh all the cached metadata of the given
         table. For performance reasons, Spark SQL or the external data source
         library it uses might cache certain metadata about a table, such as the
         location of blocks. When those change outside of Spark SQL, users should

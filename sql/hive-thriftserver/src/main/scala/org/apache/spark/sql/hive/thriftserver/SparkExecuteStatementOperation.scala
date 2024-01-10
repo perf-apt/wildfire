@@ -21,7 +21,7 @@ import java.security.PrivilegedExceptionAction
 import java.util.{Collections, Map => JMap}
 import java.util.concurrent.{Executors, RejectedExecutionException, TimeUnit}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.shims.Utils
@@ -32,6 +32,7 @@ import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TP
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.HiveResult.getTimeFormatters
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types._
@@ -48,11 +49,13 @@ private[hive] class SparkExecuteStatementOperation(
   with SparkOperation
   with Logging {
 
+  val session = sqlContext.sparkSession
+
   // If a timeout value `queryTimeout` is specified by users and it is smaller than
   // a global timeout value, we use the user-specified value.
   // This code follows the Hive timeout behaviour (See #29933 for details).
   private val timeout = {
-    val globalTimeout = sqlContext.conf.getConf(SQLConf.THRIFTSERVER_QUERY_TIMEOUT)
+    val globalTimeout = session.sessionState.conf.getConf(SQLConf.THRIFTSERVER_QUERY_TIMEOUT)
     if (globalTimeout > 0 && (queryTimeout <= 0 || globalTimeout < queryTimeout)) {
       globalTimeout
     } else {
@@ -60,13 +63,13 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private val forceCancel = sqlContext.conf.getConf(SQLConf.THRIFTSERVER_FORCE_CANCEL)
+  private val forceCancel = session.sessionState.conf.getConf(SQLConf.THRIFTSERVER_FORCE_CANCEL)
 
   private val redactedStatement = {
-    val substitutorStatement = SQLConf.withExistingConf(sqlContext.conf) {
+    val substitutorStatement = SQLConf.withExistingConf(session.sessionState.conf) {
       new VariableSubstitution().substitute(statement)
     }
-    SparkUtils.redact(sqlContext.conf.stringRedactionPattern, substitutorStatement)
+    SparkUtils.redact(session.sessionState.conf.stringRedactionPattern, substitutorStatement)
   }
 
   private var result: DataFrame = _
@@ -96,7 +99,7 @@ private[hive] class SparkExecuteStatementOperation(
   private def getNextRowSetInternal(
       order: FetchOrientation,
       maxRowsL: Long): TRowSet = withLocalProperties {
-    log.info(s"Received getNextRowSet request order=${order} and maxRowsL=${maxRowsL} " +
+    log.debug(s"Received getNextRowSet request order=${order} and maxRowsL=${maxRowsL} " +
       s"with ${statementId}")
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
@@ -112,7 +115,7 @@ private[hive] class SparkExecuteStatementOperation(
     val maxRows = maxRowsL.toInt
     val offset = iter.getPosition
     val rows = iter.take(maxRows).toList
-    log.info(s"Returning result set with ${rows.length} rows from offsets " +
+    log.debug(s"Returning result set with ${rows.length} rows from offsets " +
       s"[${iter.getFetchStart}, ${offset}) with $statementId")
     RowSetUtils.toTRowSet(offset, rows, dataTypes, getProtocolVersion, getTimeFormatters)
   }
@@ -229,7 +232,7 @@ private[hive] class SparkExecuteStatementOperation(
         result.queryExecution.toString())
       iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
         new IterableFetchIterator[Row](new Iterable[Row] {
-          override def iterator: Iterator[Row] = result.toLocalIterator.asScala
+          override def iterator: Iterator[Row] = result.toLocalIterator().asScala
         })
       } else {
         new ArrayFetchIterator[Row](result.collect())
@@ -258,7 +261,7 @@ private[hive] class SparkExecuteStatementOperation(
           e match {
             case _: HiveSQLException => throw e
             case _ => throw HiveThriftServerErrors.runningQueryError(
-              e, sqlContext.conf.errorMessageFormat)
+              e, sqlContext.sparkSession.sessionState.conf.errorMessageFormat)
           }
         }
     } finally {
@@ -333,6 +336,8 @@ object SparkExecuteStatementOperation {
     case _: ArrayType => TTypeId.ARRAY_TYPE
     case _: MapType => TTypeId.MAP_TYPE
     case _: StructType => TTypeId.STRUCT_TYPE
+    case _: CharType => TTypeId.CHAR_TYPE
+    case _: VarcharType => TTypeId.VARCHAR_TYPE
     case other =>
       throw new IllegalArgumentException(s"Unrecognized type name: ${other.catalogString}")
   }
@@ -344,6 +349,9 @@ object SparkExecuteStatementOperation {
         Map(
           TCLIServiceConstants.PRECISION -> TTypeQualifierValue.i32Value(d.precision),
           TCLIServiceConstants.SCALE -> TTypeQualifierValue.i32Value(d.scale)).asJava
+      case _: VarcharType | _: CharType =>
+        Map(TCLIServiceConstants.CHARACTER_MAXIMUM_LENGTH ->
+          TTypeQualifierValue.i32Value(typ.defaultSize)).asJava
       case _ => Collections.emptyMap[String, TTypeQualifierValue]()
     }
     ret.setQualifiers(qualifiers)
@@ -369,7 +377,7 @@ object SparkExecuteStatementOperation {
 
   def toTTableSchema(schema: StructType): TTableSchema = {
     val tTableSchema = new TTableSchema()
-    schema.zipWithIndex.foreach { case (f, i) =>
+    CharVarcharUtils.getRawSchema(schema).zipWithIndex.foreach { case (f, i) =>
       tTableSchema.addToColumns(toTColumnDesc(f, i))
     }
     tTableSchema

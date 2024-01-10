@@ -21,12 +21,14 @@ import java.io.CharArrayWriter
 
 import com.univocity.parsers.csv.CsvParser
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.csv._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -91,7 +93,7 @@ case class CsvToStructs(
       assert(!rows.hasNext)
       result
     } else {
-      throw new IllegalStateException("Expected one row from CSV parser.")
+      throw SparkException.internalError("Expected one row from CSV parser.")
     }
   }
 
@@ -166,7 +168,7 @@ case class CsvToStructs(
 case class SchemaOfCsv(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with CodegenFallback {
+  extends UnaryExpression with CodegenFallback with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -184,10 +186,17 @@ case class SchemaOfCsv(
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.foldable && csv != null) {
       super.checkInputDataTypes()
+    } else if (!child.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("csv"),
+          "inputType" -> toSQLType(child.dataType),
+          "inputExpr" -> toSQLExpr(child)))
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        "The input csv should be a foldable string expression and not null; " +
-        s"however, got ${child.sql}.")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "csv"))
     }
   }
 
@@ -237,8 +246,7 @@ case class StructsToCsv(
      options: Map[String, String],
      child: Expression,
      timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes
-    with NullIntolerant {
+  extends UnaryExpression with TimeZoneAwareExpression with ExpectsInputTypes with NullIntolerant {
   override def nullable: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
@@ -285,4 +293,10 @@ case class StructsToCsv(
 
   override protected def withNewChildInternal(newChild: Expression): StructsToCsv =
     copy(child = newChild)
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val structsToCsv = ctx.addReferenceObj("structsToCsv", this)
+    nullSafeCodeGen(ctx, ev,
+      eval => s"${ev.value} = (UTF8String) $structsToCsv.converter().apply($eval);")
+  }
 }

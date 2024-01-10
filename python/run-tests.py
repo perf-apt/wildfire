@@ -62,7 +62,7 @@ LOGGER = logging.getLogger()
 
 # Find out where the assembly jars are located.
 # TODO: revisit for Scala 2.13
-for scala in ["2.12", "2.13"]:
+for scala in ["2.13"]:
     build_dir = os.path.join(SPARK_HOME, "assembly", "target", "scala-" + scala)
     if os.path.isdir(build_dir):
         SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars", "*")
@@ -117,8 +117,9 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         "--conf", "spark.driver.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.executor.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.sql.warehouse.dir='{0}'".format(metastore_dir),
-        "pyspark-shell"
+        "pyspark-shell",
     ]
+
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
 
     output_prefix = get_valid_filename(pyspark_python + "__" + test_name + "__").lstrip("_")

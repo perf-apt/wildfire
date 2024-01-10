@@ -21,7 +21,7 @@ import java.time.{Duration, Period}
 import java.time.temporal.ChronoUnit
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetTest}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 
@@ -128,14 +128,12 @@ class HiveParquetSuite extends QueryTest
       }
       checkError(
         exception = ex,
-        errorClass = "UNRESOLVED_COLUMN",
-        errorSubClass = "WITH_SUGGESTION",
-        sqlState = None,
-        parameters = Map("objectName" -> "`c3`",
-          "proposal" -> ("`__auto_generated_subquery_name`.`c1`, " +
-            "`__auto_generated_subquery_name`.`c2`")),
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`c3`", "proposal" -> "`c1`, `c2`"),
         context = ExpectedContext(
-          fragment = query.trim, start = 1, stop = 118)
+          fragment = "c3",
+          start = 61,
+          stop = 62)
        )
     }
   }
@@ -159,7 +157,8 @@ class HiveParquetSuite extends QueryTest
 
   test("SPARK-37098: Alter table properties should invalidate cache") {
     // specify the compression in case we change it in future
-    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "snappy") {
+    withSQLConf(
+      SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.SNAPPY.lowerCaseName()) {
       withTempPath { dir =>
         withTable("t") {
           sql(s"CREATE TABLE t (c int) STORED AS PARQUET LOCATION '${dir.getCanonicalPath}'")

@@ -33,22 +33,22 @@ import org.apache.spark.sql.internal.SQLConf
 
 class CompareNewAndOldConstraintsSuite extends SparkFunSuite with PlanTest with PredicateHelper {
   test("new filter pushed down on Join Node with multiple join conditions") {
-    val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
-    val tr2 = LocalRelation('x.int, 'y.string, 'z.int)
-    val query = tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -15).
-      select('a, 'a.as('a1), 'a.as('a2),
-        'b.as('b1), 'c, 'c.as('c1)).
-      join(tr2, Inner, Some("a2".attr === "x".attr && 'c1.attr === 'z.attr))
-      .where('a1.attr + 'c1.attr > 10)
+    val tr1 = LocalRelation($"a".int, $"b".string, $"c".int)
+    val tr2 = LocalRelation($"x".int, $"y".string, $"z".int)
+    val query = tr1.where($"c" + $"a" > 10 && $"a" > -15).
+      select($"a", $"a".as("a1"), $"a".as("a2"),
+        $"b".as("b1"), $"c", $"c".as("c1")).
+      join(tr2, Inner, Some($"a2" === $"x" && $"c1" === $"z"))
+      .where($"a1" + $"c1" > 10)
 
     withSQLConf() {
       val optimized = executePlan(query, OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING)
-      val correctAnswer = tr1.where('c.attr + 'a.attr > 10 && 'a.attr > -15 &&
-        IsNotNull('a) && IsNotNull('c)).select('a, 'a.as('a1), 'a.as('a2),
-        'b.as('b1), 'c,
-        'c.as('c1)).join(tr2.where(IsNotNull('x) && IsNotNull('z) && 'x.attr > -15
-        && 'z.attr + 'x.attr > 10),
-        Inner, Some("a2".attr === "x".attr && 'c1.attr === 'z.attr)).analyze
+      val correctAnswer = tr1.where($"c" + $"a" > 10 && $"a" > -15 &&
+        IsNotNull($"a") && IsNotNull($"c")).select($"a", $"a".as("a1"), $"a".as("a2"),
+        $"b".as("b1"), $"c",
+        $"c".as("c1")).join(tr2.where(IsNotNull($"x") && IsNotNull($"z") && $"x" > -15
+        && $"z" + $"x" > 10),
+        Inner, Some($"a2" === $"x" && $"c1" === $"z")).analyze
 
       comparePlans(optimized, correctAnswer)
     }
@@ -56,36 +56,36 @@ class CompareNewAndOldConstraintsSuite extends SparkFunSuite with PlanTest with 
 
   test("test pruning using constraints with filters after project - 2") {
     def getTestPlan: LogicalPlan = {
-      val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
-      tr1.select('a, 'a.as('a1), 'a.as('a2),
-        'b.as('b1), 'c, 'c.as('c1)).where('c.attr + 'a.attr > 10 && 'a.attr > -15).
-        where('c1.attr + 'a2.attr > 10 && 'a2.attr > -15)
+      val tr1 = LocalRelation($"a".int, $"b".string, $"c".int)
+      tr1.select($"a", $"a".as("a1"), $"a".as("a2"),
+        $"b".as("b1"), $"c", $"c".as("c1")).where($"c" + $"a" > 10 && $"a" > -15).
+        where($"c1" + $"a2" > 10 && $"a2" > -15)
     }
 
     withSQLConf() {
       val optimizedPlan = executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-      val correctAnswer = LocalRelation('a.int, 'b.string, 'c.int).
-        select('a, 'a.as('a1), 'a.as('a2),
-          'b.as('b1), 'c, 'c.as('c1)).where('c.attr + 'a.attr > 10 && 'a.attr > -15
-        && IsNotNull('a) && IsNotNull('c)).analyze
+      val correctAnswer = LocalRelation($"a".int, $"b".string, $"c".int).
+        select($"a", $"a".as("a1"), $"a".as("a2"),
+          $"b".as("b1"), $"c", $"c".as("c1")).where($"c" + $"a" > 10 && $"a" > -15
+        && IsNotNull($"a") && IsNotNull($"c")).analyze
       comparePlans(correctAnswer, optimizedPlan)
     }
   }
 
   test("test pruning using constraints with filters after project - 3") {
     def getTestPlan: LogicalPlan = {
-      val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
-      tr1.select('a, 'a.as('a1), 'a.as('a2),
-        'b.as('b1), 'c, 'c.as('c1)).where('c1.attr + 'a1.attr > 10 && 'a2.attr > -15).
-        where('c.attr + 'a.attr > 10 && 'a.attr > -15)
+      val tr1 = LocalRelation($"a".int, $"b".string, $"c".int)
+      tr1.select($"a", $"a".as("a1"), $"a".as("a2"),
+        $"b".as("b1"), $"c", $"c".as("c1")).where($"c1" + $"a1" > 10 && $"a2" > -15).
+        where($"c" + $"a" > 10 && $"a" > -15)
     }
 
     withSQLConf() {
       val optimizedPlan = executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-      val correctAnswer = LocalRelation('a.int, 'b.string, 'c.int).
-        select('a, 'a.as('a1), 'a.as('a2),
-          'b.as('b1), 'c, 'c.as('c1)).where('c1.attr + 'a1.attr > 10 && 'a2.attr > -15
-        && IsNotNull('a) && IsNotNull('c)).analyze
+      val correctAnswer = LocalRelation($"a".int, $"b".string, $"c".int).
+        select($"a", $"a".as("a1"), $"a".as("a2"),
+          $"b".as("b1"), $"c", $"c".as("c1")).where($"c1" + $"a1" > 10 && $"a2" > -15
+        && IsNotNull($"a") && IsNotNull($"c")).analyze
       comparePlans(correctAnswer, optimizedPlan)
     }
   }
@@ -93,27 +93,27 @@ class CompareNewAndOldConstraintsSuite extends SparkFunSuite with PlanTest with 
   test("test new filter inference with decanonicalization for expression not" +
     " implementing NullIntolerant - 1") {
     def getTestPlan: LogicalPlan = {
-      val tr1 = LocalRelation('a.int, 'b.int, 'c.int)
-      tr1.select('a, 'a.as('a1), 'a.as('a2),
-        'b.as('b1), 'c, 'c.as('c1),
-        CaseWhen(Seq(('a.attr + 'b.attr + 'c.attr > Literal(1),
-          Literal(1)), ('a.attr + 'b.attr + 'c.attr > Literal(2), Literal(2))),
-          Option(Literal(null))).as("z")).where('z.attr > 10 && 'a2.attr > -15).
-        where(CaseWhen(Seq(('a.attr + 'b.attr + 'c.attr > Literal(1),
-          Literal(1)), ('a.attr + 'b.attr + 'c.attr > Literal(2), Literal(2))),
-          Option(Literal(null))) > 10 && 'a.attr > -15).where('z.attr > 10)
+      val tr1 = LocalRelation($"a".int, $"b".int, $"c".int)
+      tr1.select($"a", $"a".as("a1"), $"a".as("a2"),
+        $"b".as("b1"), $"c", $"c".as("c1"),
+        CaseWhen(Seq(($"a" + $"b" + $"c" > Literal(1),
+          Literal(1)), ($"a" + $"b" + $"c" > Literal(2), Literal(2))),
+          Option(Literal(null))).as("z")).where($"z" > 10 && $"a2" > -15).
+        where(CaseWhen(Seq(($"a" + $"b" + $"c" > Literal(1),
+          Literal(1)), ($"a" + $"b" + $"c" > Literal(2), Literal(2))),
+          Option(Literal(null))) > 10 && $"a" > -15).where($"z" > 10)
     }
 
     withSQLConf() {
       val optimizedPlan = executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-      val correctAnswer = LocalRelation('a.int, 'b.int, 'c.int).
-        select('a, 'a.as('a1), 'a.as('a2),
-          'b.as('b1), 'c, 'c.as('c1), CaseWhen(Seq(
-            ('a.attr + 'b.attr + 'c.attr > Literal(1),
-              Literal(1)), ('a.attr + 'b.attr + 'c.attr > Literal(2), Literal(2))),
-            Option(Literal(null))).as("z"), 'b).where('z.attr > 10 && 'a2.attr > -15
-        && IsNotNull('a) && IsNotNull('z)).select('a, 'a1, 'a2,
-        'b1, 'c, 'c1, 'z).analyze
+      val correctAnswer = LocalRelation($"a".int, $"b".int, $"c".int).
+        select($"a", $"a".as("a1"), $"a".as("a2"),
+          $"b".as("b1"), $"c", $"c".as("c1"), CaseWhen(Seq(
+            ($"a" + $"b" + $"c" > Literal(1),
+              Literal(1)), ($"a" + $"b" + $"c" > Literal(2), Literal(2))),
+            Option(Literal(null))).as("z"), $"b").where($"z" > 10 && $"a2" > -15
+        && IsNotNull($"a") && IsNotNull($"z")).select($"a", $"a1", $"a2",
+        $"b1", $"c", $"c1", $"z").analyze
       comparePlans(correctAnswer, optimizedPlan)
     }
   }
@@ -121,27 +121,27 @@ class CompareNewAndOldConstraintsSuite extends SparkFunSuite with PlanTest with 
   test("test new filter inference with decanonicalization for expression not" +
     " implementing NullIntolerant - 2") {
     def getTestPlan: LogicalPlan = {
-      val tr1 = LocalRelation('a.int, 'b.int, 'c.int)
-      tr1.select('a, 'a.as('a1), 'a.as('a2),
-        'b.as('b1), 'c, 'c.as('c1),
-        ('a.attr + CaseWhen(Seq(('a.attr + 'b.attr + 'c.attr > Literal(1),
-          Literal(1)), ('a.attr + 'b.attr + 'c.attr > Literal(2), Literal(2))),
-          Option(Literal(null)))).as("z")).where('z.attr > 10 && 'a2.attr > -15).
-        where('a.attr + CaseWhen(Seq(('a.attr + 'b.attr + 'c.attr > Literal(1),
-          Literal(1)), ('a.attr + 'b.attr + 'c.attr > Literal(2), Literal(2))),
-          Option(Literal(null))) > 10 && 'a.attr > -15).where('z.attr > 10)
+      val tr1 = LocalRelation($"a".int, $"b".int, $"c".int)
+      tr1.select($"a", $"a".as("a1"), $"a".as("a2"),
+        $"b".as("b1"), $"c", $"c".as("c1"),
+        ($"a" + CaseWhen(Seq(($"a" + $"b" + $"c" > Literal(1),
+          Literal(1)), ($"a" + $"b" + $"c" > Literal(2), Literal(2))),
+          Option(Literal(null)))).as("z")).where($"z" > 10 && $"a2" > -15).
+        where($"a" + CaseWhen(Seq(($"a" + $"b" + $"c" > Literal(1),
+          Literal(1)), ($"a" + $"b" + $"c" > Literal(2), Literal(2))),
+          Option(Literal(null))) > 10 && $"a" > -15).where($"z" > 10)
     }
 
     withSQLConf() {
       val optimizedPlan = executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-      val correctAnswer = LocalRelation('a.int, 'b.int, 'c.int).
-        select('a, 'a.as('a1), 'a.as('a2),
-          'b.as('b1), 'c, 'c.as('c1), ('a.attr + CaseWhen(Seq(
-            ('a.attr + 'b.attr + 'c.attr > Literal(1),
-              Literal(1)), ('a.attr + 'b.attr + 'c.attr > Literal(2), Literal(2))),
-            Option(Literal(null)))).as("z"), 'b).where('z.attr > 10 && 'a2.attr > -15
-        && IsNotNull('a) && IsNotNull('z)).select('a, 'a1, 'a2,
-        'b1, 'c, 'c1, 'z).analyze
+      val correctAnswer = LocalRelation($"a".int, $"b".int, $"c".int).
+        select($"a", $"a".as("a1"), $"a".as("a2"),
+          $"b".as("b1"), $"c", $"c".as("c1"), ($"a" + CaseWhen(Seq(
+            ($"a" + $"b" + $"c" > Literal(1),
+              Literal(1)), ($"a" + $"b" + $"c" > Literal(2), Literal(2))),
+            Option(Literal(null)))).as("z"), $"b").where($"z" > 10 && $"a2" > -15
+        && IsNotNull($"a") && IsNotNull($"z")).select($"a", $"a1", $"a2",
+        $"b1", $"c", $"c1", $"z").analyze
       comparePlans(correctAnswer, optimizedPlan)
     }
   }
@@ -149,20 +149,20 @@ class CompareNewAndOldConstraintsSuite extends SparkFunSuite with PlanTest with 
   test("test new filter inference with decanonicalization for expression" +
     "implementing NullIntolerant") {
     def getTestPlan: LogicalPlan = {
-      val tr1 = LocalRelation('a.int, 'b.int, 'c.int)
-      tr1.select('a, 'a.as('a1), 'a.as('a2),
-        'b.as('b1), 'c, 'c.as('c1),
-        ('a.attr + 'b.attr + 'c.attr).as("z")).where('z.attr > 10 && 'a2.attr > -15).
-        where('a.attr + 'b1.attr + 'c.attr > 10 && 'a.attr > -15)
+      val tr1 = LocalRelation($"a".int, $"b".int, $"c".int)
+      tr1.select($"a", $"a".as("a1"), $"a".as("a2"),
+        $"b".as("b1"), $"c", $"c".as("c1"),
+        ($"a" + $"b" + $"c").as("z")).where($"z" > 10 && $"a2" > -15).
+        where($"a" + $"b1" + $"c" > 10 && $"a" > -15)
     }
 
     withSQLConf() {
       val optimizedPlan = executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-      val correctAnswer = LocalRelation('a.int, 'b.int, 'c.int).
-        select('a, 'a.as('a1), 'a.as('a2),
-          'b.as('b1), 'c, 'c.as('c1),
-          ('a.attr + 'b.attr + 'c.attr).as("z")).where('z.attr > 10 && 'a2.attr > -15
-        && IsNotNull('a) && IsNotNull('b1) && IsNotNull('c)).analyze
+      val correctAnswer = LocalRelation($"a".int, $"b".int, $"c".int).
+        select($"a", $"a".as("a1"), $"a".as("a2"),
+          $"b".as("b1"), $"c", $"c".as("c1"),
+          ($"a" + $"b" + $"c").as("z")).where($"z" > 10 && $"a2" > -15
+        && IsNotNull($"a") && IsNotNull($"b1") && IsNotNull($"c")).analyze
       comparePlans(correctAnswer, optimizedPlan)
     }
   }
@@ -170,65 +170,67 @@ class CompareNewAndOldConstraintsSuite extends SparkFunSuite with PlanTest with 
   test("test pruning using constraints with filters after project with expression in" +
     " alias.") {
     def getTestPlan: LogicalPlan = {
-      val tr1 = LocalRelation('a.int, 'b.int, 'c.int)
-      tr1.select('a, 'a.as('a1), 'a.as('a2), 'b,
-        'b.as('b1), 'c, 'c.as('c1), ('a.attr + 'b.attr).as("z")).
-        where('c1.attr + 'z.attr > 10 &&
-          'a2.attr > -15).
-        where('c.attr + 'a.attr + 'b.attr > 10 &&
-          'a.attr > -15)
+      val tr1 = LocalRelation($"a".int, $"b".int, $"c".int)
+      tr1.select($"a", $"a".as("a1"), $"a".as("a2"), $"b",
+        $"b".as("b1"), $"c", $"c".as("c1"), ($"a" + $"b").as("z")).
+        where($"c1" + $"z" > 10 &&
+          $"a2" > -15).
+        where($"c" + $"a" + $"b" > 10 &&
+          $"a" > -15)
     }
 
 
     withSQLConf() {
       val optimizedPlan = executePlan(getTestPlan, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-      val correctAnswer = LocalRelation('a.int, 'b.int, 'c.int).
-        select('a, 'a.as('a1), 'a.as('a2), 'b,
-          'b.as('b1), 'c, 'c.as('c1), ('a.attr + 'b.attr).as("z")).
-        where('c1.attr + 'z.attr > 10 &&
-          'a2.attr > -15 && IsNotNull('b)
-          && IsNotNull('a) && IsNotNull('c)).analyze
+      val correctAnswer = LocalRelation($"a".int, $"b".int, $"c".int).
+        select($"a", $"a".as("a1"), $"a".as("a2"), $"b",
+          $"b".as("b1"), $"c", $"c".as("c1"), ($"a" + $"b").as("z")).
+        where($"c1" + $"z" > 10 &&
+          $"a2" > -15 && IsNotNull($"b")
+          && IsNotNull($"a") && IsNotNull($"c")).analyze
       comparePlans(correctAnswer, optimizedPlan)
     }
   }
 
   ignore("Disabled due to spark's canonicalization bug." +
     " test pruning using constraints with filters after project with expression in alias.") {
-    val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
-    val query = tr1.select('a, 'a.as('a1), 'a.as('a2), 'b,
-      'b.as('b1), 'c, 'c.as('c1), ('a.attr + 'b.attr).as("z")).
-      where('c1.attr + 'z.attr > 10 && 'a2.attr > -15).
-      where('c.attr + 'a.attr + 'b.attr > 10 && 'a.attr > -15)
+    val tr1 = LocalRelation($"a".int, $"b".string, $"c".int)
+    val query = tr1.select($"a", $"a".as("a1"), $"a".as("a2"), $"b",
+      $"b".as("b1"), $"c", $"c".as("c1"), ($"a" + $"b").as("z")).
+      where($"c1" + $"z" > 10 && $"a2" > -15).
+      where($"c" + $"a" + $"b" > 10 && $"a" > -15)
 
     withSQLConf() {
       val optimizedPlan = executePlan(query, OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING)
-      val correctAnswer = LocalRelation('a.int, 'b.string, 'c.int).
-        select('a, 'a.as('a1), 'a.as('a2), 'b,
-          'b.as('b1), 'c, 'c.as('c1), ('a.attr + 'b.attr).as("z")).
-        where('c1.attr + 'z.attr > 10 && 'a2.attr > -15
-          && IsNotNull('a) && IsNotNull('c) && IsNotNull('b)).analyze
+      val correctAnswer = LocalRelation($"a".int, $"b".string, $"c".int).
+        select($"a", $"a".as("a1"), $"a".as("a2"), $"b",
+          $"b".as("b1"), $"c", $"c".as("c1"), ($"a" + $"b").as("z")).
+        where($"c1" + $"z" > 10 && $"a2" > -15
+          && IsNotNull($"a") && IsNotNull($"c") && IsNotNull($"b")).analyze
       comparePlans(correctAnswer, optimizedPlan)
     }
   }
 
   test("plan equivalence with case statements and performance comparison with benefit" +
     "of more than 10x conservatively") {
-    val tr = LocalRelation('a.int, 'b.int, 'c.int, 'd.int, 'e.int, 'f.int, 'g.int, 'h.int, 'i.int,
-      'j.int, 'k.int, 'l.int, 'm.int, 'n.int)
-    val query = tr.select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j, 'k, 'l, 'm, 'n,
-      CaseWhen(Seq(('a.attr + 'b.attr + 'c.attr + 'd.attr + 'e.attr + 'f.attr + 'g.attr
-        + 'h.attr + 'i.attr + 'j.attr + 'k.attr + 'l.attr + 'm.attr + 'n.attr > Literal(1),
+    val tr = LocalRelation($"a".int, $"b".int, $"c".int, $"d".int, $"e".int, $"f".int, $"g".int,
+      $"h".int, $"i".int, $"j".int, $"k".int, $"l".int, $"m".int, $"n".int)
+    val query = tr.select($"a", $"b", $"c", $"d", $"e", $"f", $"g", $"h", $"i", $"j", $"k", $"l",
+      $"m", $"n",
+      CaseWhen(Seq(($"a" + $"b" + $"c" + $"d" + $"e" + $"f" + $"g"
+        + $"h" + $"i" + $"j" + $"k" + $"l" + $"m" + $"n" > Literal(1),
         Literal(1)),
-        ('a.attr + 'b.attr + 'c.attr + 'd.attr + 'e.attr + 'f.attr + 'g.attr + 'h.attr +
-          'i.attr + 'j.attr + 'k.attr + 'l.attr + 'm.attr + 'n.attr > Literal(2), Literal(2))),
+        ($"a" + $"b" + $"c" + $"d" + $"e" + $"f" + $"g" + $"h" +
+          $"i" + $"j" + $"k" + $"l" + $"m" + $"n" > Literal(2), Literal(2))),
         Option(Literal(0))).as("JoinKey1")
-    ).select('a.attr.as("a1"), 'b.attr.as("b1"), 'c.attr.as("c1"),
-      'd.attr.as("d1"), 'e.attr.as("e1"), 'f.attr.as("f1"),
-      'g.attr.as("g1"), 'h.attr.as("h1"), 'i.attr.as("i1"),
-      'j.attr.as("j1"), 'k.attr.as("k1"), 'l.attr.as("l1"),
-      'm.attr.as("m1"), 'n.attr.as("n1"), 'JoinKey1.attr.as("cf1"),
-      'JoinKey1.attr).select('a1, 'b1, 'c1, 'd1, 'e1, 'f1, 'g1, 'h1, 'i1, 'j1, 'k1,
-      'l1, 'm1, 'n1, 'cf1, 'JoinKey1).join(tr, condition = Option('a.attr <=> 'JoinKey1.attr)).
+    ).select($"a".as("a1"), $"b".as("b1"), $"c".as("c1"),
+      $"d".as("d1"), $"e".as("e1"), $"f".as("f1"),
+      $"g".as("g1"), $"h".as("h1"), $"i".as("i1"),
+      $"j".as("j1"), $"k".as("k1"), $"l".as("l1"),
+      $"m".as("m1"), $"n".as("n1"), $"JoinKey1".as("cf1"),
+      $"JoinKey1").select($"a1", $"b1", $"c1", $"d1", $"e1", $"f1", $"g1", $"h1", $"i1", $"j1",
+      $"k1", $"l1", $"m1", $"n1", $"cf1", $"JoinKey1").
+      join(tr, condition = Option($"a" <=> $"JoinKey1")).
       analyze
 
     withSQLConf() {

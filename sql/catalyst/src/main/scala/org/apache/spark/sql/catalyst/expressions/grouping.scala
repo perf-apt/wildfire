@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GROUPING_ANALYTICS, TreePattern}
@@ -41,10 +42,12 @@ trait BaseGroupingSets extends Expression with CodegenFallback {
   // this should be replaced first
   override lazy val resolved: Boolean = false
 
-  override def dataType: DataType = throw new UnsupportedOperationException
+  override def dataType: DataType =
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3122")
   override def foldable: Boolean = false
   override def nullable: Boolean = true
-  override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
+  override def eval(input: InternalRow): Any =
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3123")
   final override val nodePatterns: Seq[TreePattern] = Seq(GROUPING_ANALYTICS)
 }
 
@@ -154,12 +157,22 @@ case class GroupingSets(
   // Note that, we must put `userGivenGroupByExprs` at the beginning, to preserve the order of
   // grouping columns specified by users. For example, GROUP BY (a, b) GROUPING SETS (b, a), the
   // final grouping columns should be (a, b).
-  override def children: Seq[Expression] = userGivenGroupByExprs ++ flatGroupingSets
+  override def children: Seq[Expression] =
+    if (SQLConf.get.groupingIdWithAppendedUserGroupByEnabled) {
+      flatGroupingSets ++ userGivenGroupByExprs
+    } else {
+      userGivenGroupByExprs ++ flatGroupingSets
+    }
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): GroupingSets =
-    copy(
-      userGivenGroupByExprs = newChildren.take(userGivenGroupByExprs.length),
-      flatGroupingSets = newChildren.drop(userGivenGroupByExprs.length))
+    if (SQLConf.get.groupingIdWithAppendedUserGroupByEnabled) {
+      super.legacyWithNewChildren(newChildren).asInstanceOf[GroupingSets]
+    } else {
+      copy(
+        userGivenGroupByExprs = newChildren.take(userGivenGroupByExprs.length),
+        flatGroupingSets = newChildren.drop(userGivenGroupByExprs.length))
+    }
 }
 
 object GroupingSets {

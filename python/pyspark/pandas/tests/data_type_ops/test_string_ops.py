@@ -30,14 +30,10 @@ if extension_object_dtypes_available:
     from pandas import StringDtype
 
 
-class StringOpsTest(OpsTestBase):
+class StringOpsTestsMixin:
     @property
     def bool_pdf(self):
         return pd.DataFrame({"this": ["x", "y", "z"], "that": ["z", "y", "x"]})
-
-    @property
-    def bool_psdf(self):
-        return ps.from_pandas(self.bool_pdf)
 
     @property
     def bool_non_numeric_pdf(self):
@@ -160,7 +156,7 @@ class StringOpsTest(OpsTestBase):
         data = ["x", "y", "z"]
         pser = pd.Series(data)
         psser = ps.Series(data)
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -233,10 +229,14 @@ class StringOpsTest(OpsTestBase):
         self.assert_eq(pser >= pser, psser >= psser)
 
 
+class StringOpsTests(StringOpsTestsMixin, OpsTestBase):
+    pass
+
+
 @unittest.skipIf(
     not extension_object_dtypes_available, "pandas extension object dtypes are not available"
 )
-class StringExtensionOpsTest(StringOpsTest):
+class StringExtensionOpsTest(StringOpsTests):
     @property
     def pser(self):
         return pd.Series(["x", "y", "z", None], dtype="string")
@@ -275,7 +275,7 @@ class StringExtensionOpsTest(StringOpsTest):
         data = ["x", "y", "z", None]
         pser = pd.Series(data, dtype="string")
         psser = ps.Series(data, dtype="string")
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -338,11 +338,10 @@ class StringExtensionOpsTest(StringOpsTest):
 
 
 if __name__ == "__main__":
-
     from pyspark.pandas.tests.data_type_ops.test_string_ops import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

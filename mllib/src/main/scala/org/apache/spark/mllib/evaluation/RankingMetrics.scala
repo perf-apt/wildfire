@@ -19,13 +19,14 @@ package org.apache.spark.mllib.evaluation
 
 import java.{lang => jl}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.collection.Utils
 
 /**
  * Evaluator for ranking algorithms.
@@ -43,8 +44,10 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
     with Serializable {
 
   private val rdd = predictionAndLabels.map {
-    case (pred: Array[T], lab: Array[T]) => (pred, lab, Array.empty[Double])
-    case (pred: Array[T], lab: Array[T], rel: Array[Double]) => (pred, lab, rel)
+    case (pred: Array[T] @unchecked, lab: Array[T] @unchecked) =>
+      (pred, lab, Array.empty[Double])
+    case (pred: Array[T] @unchecked, lab: Array[T] @unchecked, rel: Array[Double]) =>
+      (pred, lab, rel)
     case _ => throw new IllegalArgumentException(s"Expected RDD of tuples or triplets")
   }
 
@@ -139,6 +142,9 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
    * and the NDCG is obtained by dividing the DCG value on the ground truth set. In the current
    * implementation, the relevance value is binary if the relevance value is empty.
 
+   * If the relevance value is not empty but its size doesn't match the ground truth set size,
+   * a log warning is generated.
+   *
    * If a query has an empty ground truth set, zero will be used as ndcg together with
    * a log warning.
    *
@@ -155,8 +161,8 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
     rdd.map { case (pred, lab, rel) =>
       val useBinary = rel.isEmpty
       val labSet = lab.toSet
-      val relMap = lab.zip(rel).toMap
-      if (useBinary && lab.size != rel.size) {
+      val relMap = Utils.toMap(lab, rel)
+      if (!useBinary && lab.length != rel.length) {
         logWarning(
           "# of ground truth set and # of relevance value set should be equal, " +
             "check input data")

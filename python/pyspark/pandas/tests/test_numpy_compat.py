@@ -20,32 +20,23 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas import set_option, reset_option
-from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 from pyspark.testing.pandasutils import ComparisonTestBase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class NumPyCompatTest(ComparisonTestBase, SQLTestUtils):
+class NumPyCompatTestsMixin:
     blacklist = [
-        # Koalas does not currently support
+        # Pandas-on-Spark does not currently support
         "conj",
         "conjugate",
         "isnat",
         "matmul",
         "frexp",
         # Values are close enough but tests failed.
-        "arccos",
-        "exp",
-        "expm1",
         "log",  # flaky
         "log10",  # flaky
         "log1p",  # flaky
         "modf",
-        "floor_divide",  # flaky
-        # Results seem inconsistent in a different version of, I (Hyukjin) suspect, PyArrow.
-        # From PyArrow 0.15, seems it returns the correct results via PySpark. Probably we
-        # can enable it later when Koalas switches to PyArrow 0.15 completely.
-        "left_shift",
     ]
 
     @property
@@ -86,6 +77,8 @@ class NumPyCompatTest(ComparisonTestBase, SQLTestUtils):
             np.left_shift(psdf1, psdf2)
 
     def test_np_spark_compat_series(self):
+        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
             np.random.randint(-100, 100, size=(np.random.randint(100), 2)), columns=["a", "b"]
@@ -134,6 +127,8 @@ class NumPyCompatTest(ComparisonTestBase, SQLTestUtils):
             reset_option("compute.ops_on_diff_frames")
 
     def test_np_spark_compat_frame(self):
+        from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
+
         # Use randomly generated dataFrame
         pdf = pd.DataFrame(
             np.random.randint(-100, 100, size=(np.random.randint(100), 2)), columns=["a", "b"]
@@ -183,12 +178,16 @@ class NumPyCompatTest(ComparisonTestBase, SQLTestUtils):
             reset_option("compute.ops_on_diff_frames")
 
 
+class NumPyCompatTests(NumPyCompatTestsMixin, ComparisonTestBase, SQLTestUtils):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.test_numpy_compat import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

@@ -16,38 +16,29 @@
 #
 
 """
-A wrapper for ResampledData to behave similar to pandas Resampler.
+A wrapper for ResampledData to behave like pandas Resampler.
 """
-from abc import ABCMeta
-from distutils.version import LooseVersion
+from abc import ABCMeta, abstractmethod
 from functools import partial
 from typing import (
     Any,
     Generic,
     List,
     Optional,
+    Union,
 )
 
 import numpy as np
-
 import pandas as pd
 from pandas.tseries.frequencies import to_offset
 
-if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
-    from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
-else:
-    from pandas.core.base import SelectionMixin
-
-    _builtin_table = SelectionMixin._builtin_table  # type: ignore[attr-defined]
-
-from pyspark import SparkContext
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     NumericType,
     StructField,
-    TimestampType,
+    TimestampNTZType,
+    DataType,
 )
-
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import FrameLike
 from pyspark.pandas.frame import DataFrame
@@ -65,6 +56,7 @@ from pyspark.pandas.utils import (
     scol_for,
     verify_temp_column_name,
 )
+from pyspark.pandas.spark.functions import timestampdiff
 
 
 class Resampler(Generic[FrameLike], metaclass=ABCMeta):
@@ -101,7 +93,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         self._offset = to_offset(rule)
         if self._offset.rule_code not in ["A-DEC", "M", "D", "H", "T", "S"]:
             raise ValueError("rule code {} is not supported".format(self._offset.rule_code))
-        if not self._offset.n > 0:  # type: ignore[attr-defined]
+        if not getattr(self._offset, "n") > 0:
             raise ValueError("rule offset must be positive")
 
         if closed is None:
@@ -128,13 +120,33 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             return self._resamplekey.spark.column
 
     @property
+    def _resamplekey_type(self) -> DataType:
+        if self._resamplekey is None:
+            return self._psdf.index.spark.data_type
+        else:
+            return self._resamplekey.spark.data_type
+
+    @property
     def _agg_columns_scols(self) -> List[Column]:
         return [s.spark.column for s in self._agg_columns]
 
-    def _bin_time_stamp(self, origin: pd.Timestamp, ts_scol: Column) -> Column:
-        sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+    def get_make_interval(  # type: ignore[return]
+        self, unit: str, col: Union[Column, int, float]
+    ) -> Column:
+        col = col if not isinstance(col, (int, float)) else F.lit(col)
+        if unit == "MONTH":
+            return F.make_interval(months=col)
+        if unit == "HOUR":
+            return F.make_interval(hours=col)
+        if unit == "MINUTE":
+            return F.make_interval(mins=col)
+        if unit == "SECOND":
+            return F.make_interval(secs=col)
+
+    def _bin_timestamp(self, origin: pd.Timestamp, ts_scol: Column) -> Column:
+        key_type = self._resamplekey_type
         origin_scol = F.lit(origin)
-        (rule_code, n) = (self._offset.rule_code, self._offset.n)  # type: ignore[attr-defined]
+        (rule_code, n) = (self._offset.rule_code, getattr(self._offset, "n"))
         left_closed, right_closed = (self._closed == "left", self._closed == "right")
         left_labeled, right_labeled = (self._label == "left", self._label == "right")
 
@@ -166,7 +178,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
                     F.year(ts_scol) - (mod - n)
                 )
 
-            return F.to_timestamp(
+            ret = F.to_timestamp(
                 F.make_date(
                     F.when(edge_cond, edge_label).otherwise(non_edge_label), F.lit(12), F.lit(31)
                 )
@@ -191,21 +203,21 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             truncated_ts_scol = F.date_trunc("MONTH", ts_scol)
             edge_label = truncated_ts_scol
             if left_closed and right_labeled:
-                edge_label += sql_utils.makeInterval("MONTH", F.lit(n)._jc)
+                edge_label += self.get_make_interval("MONTH", n)
             elif right_closed and left_labeled:
-                edge_label -= sql_utils.makeInterval("MONTH", F.lit(n)._jc)
+                edge_label -= self.get_make_interval("MONTH", n)
 
             if left_labeled:
                 non_edge_label = F.when(
                     mod == 0,
-                    truncated_ts_scol - sql_utils.makeInterval("MONTH", F.lit(n)._jc),
-                ).otherwise(truncated_ts_scol - sql_utils.makeInterval("MONTH", mod._jc))
+                    truncated_ts_scol - self.get_make_interval("MONTH", n),
+                ).otherwise(truncated_ts_scol - self.get_make_interval("MONTH", mod))
             else:
                 non_edge_label = F.when(mod == 0, truncated_ts_scol).otherwise(
-                    truncated_ts_scol - sql_utils.makeInterval("MONTH", (mod - n)._jc)
+                    truncated_ts_scol - self.get_make_interval("MONTH", mod - n)
                 )
 
-            return F.to_timestamp(
+            ret = F.to_timestamp(
                 F.last_day(F.when(edge_cond, edge_label).otherwise(non_edge_label))
             )
 
@@ -220,15 +232,15 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
                 )
 
                 if left_closed and left_labeled:
-                    return F.date_trunc("DAY", ts_scol)
+                    ret = F.date_trunc("DAY", ts_scol)
                 elif left_closed and right_labeled:
-                    return F.date_trunc("DAY", F.date_add(ts_scol, 1))
+                    ret = F.date_trunc("DAY", F.date_add(ts_scol, 1))
                 elif right_closed and left_labeled:
-                    return F.when(edge_cond, F.date_trunc("DAY", F.date_sub(ts_scol, 1))).otherwise(
+                    ret = F.when(edge_cond, F.date_trunc("DAY", F.date_sub(ts_scol, 1))).otherwise(
                         F.date_trunc("DAY", ts_scol)
                     )
                 else:
-                    return F.when(edge_cond, F.date_trunc("DAY", ts_scol)).otherwise(
+                    ret = F.when(edge_cond, F.date_trunc("DAY", ts_scol)).otherwise(
                         F.date_trunc("DAY", F.date_add(ts_scol, 1))
                     )
 
@@ -250,14 +262,16 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
                 else:
                     non_edge_label = F.date_sub(truncated_ts_scol, mod - n)
 
-                return F.when(edge_cond, edge_label).otherwise(non_edge_label)
+                ret = F.when(edge_cond, edge_label).otherwise(non_edge_label)
 
         elif rule_code in ["H", "T", "S"]:
             unit_mapping = {"H": "HOUR", "T": "MINUTE", "S": "SECOND"}
             unit_str = unit_mapping[rule_code]
 
             truncated_ts_scol = F.date_trunc(unit_str, ts_scol)
-            diff = sql_utils.timestampDiff(unit_str, origin_scol._jc, truncated_ts_scol._jc)
+            if isinstance(key_type, TimestampNTZType):
+                truncated_ts_scol = F.to_timestamp_ntz(truncated_ts_scol)
+            diff = timestampdiff(unit_str, origin_scol, truncated_ts_scol)
             mod = F.lit(0) if n == 1 else (diff % F.lit(n))
 
             if rule_code == "H":
@@ -271,24 +285,29 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
             edge_label = truncated_ts_scol
             if left_closed and right_labeled:
-                edge_label += sql_utils.makeInterval(unit_str, F.lit(n)._jc)
+                edge_label += self.get_make_interval(unit_str, n)
             elif right_closed and left_labeled:
-                edge_label -= sql_utils.makeInterval(unit_str, F.lit(n)._jc)
+                edge_label -= self.get_make_interval(unit_str, n)
 
             if left_labeled:
                 non_edge_label = F.when(mod == 0, truncated_ts_scol).otherwise(
-                    truncated_ts_scol - sql_utils.makeInterval(unit_str, mod._jc)
+                    truncated_ts_scol - self.get_make_interval(unit_str, mod)
                 )
             else:
                 non_edge_label = F.when(
                     mod == 0,
-                    truncated_ts_scol + sql_utils.makeInterval(unit_str, F.lit(n)._jc),
-                ).otherwise(truncated_ts_scol - sql_utils.makeInterval(unit_str, (mod - n)._jc))
+                    truncated_ts_scol + self.get_make_interval(unit_str, n),
+                ).otherwise(truncated_ts_scol - self.get_make_interval(unit_str, mod - n))
 
-            return F.when(edge_cond, edge_label).otherwise(non_edge_label)
+            ret = F.when(edge_cond, edge_label).otherwise(non_edge_label)
 
         else:
             raise ValueError("Got the unexpected unit {}".format(rule_code))
+
+        if isinstance(key_type, TimestampNTZType):
+            return F.to_timestamp_ntz(ret)
+        else:
+            return ret
 
     def _downsample(self, f: str) -> DataFrame:
         """
@@ -302,9 +321,9 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
         # a simple example to illustrate the computation:
         #   dates = [
-        #         datetime.datetime(2012, 1, 2),
-        #         datetime.datetime(2012, 5, 3),
-        #         datetime.datetime(2022, 5, 3),
+        #         datetime(2012, 1, 2),
+        #         datetime(2012, 5, 3),
+        #         datetime(2022, 5, 3),
         #   ]
         #   index = pd.DatetimeIndex(dates)
         #   pdf = pd.DataFrame(np.array([1,2,3]), index=index, columns=['A'])
@@ -352,12 +371,9 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         bin_col_label = verify_temp_column_name(self._psdf, bin_col_name)
         bin_col_field = InternalField(
             dtype=np.dtype("datetime64[ns]"),
-            struct_field=StructField(bin_col_name, TimestampType(), True),
+            struct_field=StructField(bin_col_name, self._resamplekey_type, True),
         )
-        bin_scol = self._bin_time_stamp(
-            ts_origin,
-            self._resamplekey_scol,
-        )
+        bin_scol = self._bin_timestamp(ts_origin, self._resamplekey_scol)
 
         agg_columns = [
             psser for psser in self._agg_columns if (isinstance(psser.spark.data_type, NumericType))
@@ -407,6 +423,286 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
         return downsampled
 
+    @abstractmethod
+    def _handle_output(self, psdf: DataFrame) -> FrameLike:
+        pass
+
+    def min(self) -> FrameLike:
+        """
+        Compute min of resampled values.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from datetime import datetime
+        >>> np.random.seed(22)
+        >>> dates = [
+        ...    datetime(2022, 5, 1, 4, 5, 6),
+        ...    datetime(2022, 5, 3),
+        ...    datetime(2022, 5, 3, 23, 59, 59),
+        ...    datetime(2022, 5, 4),
+        ...    pd.NaT,
+        ...    datetime(2022, 5, 4, 0, 0, 1),
+        ...    datetime(2022, 5, 11),
+        ... ]
+        >>> df = ps.DataFrame(
+        ...    np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=["A", "B"]
+        ... )
+        >>> df
+                                    A         B
+        2022-05-01 04:05:06  0.208461  0.481681
+        2022-05-03 00:00:00  0.420538  0.859182
+        2022-05-03 23:59:59  0.171162  0.338864
+        2022-05-04 00:00:00  0.270533  0.691041
+        NaT                  0.220405  0.811951
+        2022-05-04 00:00:01  0.010527  0.561204
+        2022-05-11 00:00:00  0.813726  0.745100
+        >>> df.resample("3D").min().sort_index()
+                           A         B
+        2022-05-01  0.171162  0.338864
+        2022-05-04  0.010527  0.561204
+        2022-05-07       NaN       NaN
+        2022-05-10  0.813726  0.745100
+        """
+        return self._handle_output(self._downsample("min"))
+
+    def max(self) -> FrameLike:
+        """
+        Compute max of resampled values.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from datetime import datetime
+        >>> np.random.seed(22)
+        >>> dates = [
+        ...    datetime(2022, 5, 1, 4, 5, 6),
+        ...    datetime(2022, 5, 3),
+        ...    datetime(2022, 5, 3, 23, 59, 59),
+        ...    datetime(2022, 5, 4),
+        ...    pd.NaT,
+        ...    datetime(2022, 5, 4, 0, 0, 1),
+        ...    datetime(2022, 5, 11),
+        ... ]
+        >>> df = ps.DataFrame(
+        ...    np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=["A", "B"]
+        ... )
+        >>> df
+                                    A         B
+        2022-05-01 04:05:06  0.208461  0.481681
+        2022-05-03 00:00:00  0.420538  0.859182
+        2022-05-03 23:59:59  0.171162  0.338864
+        2022-05-04 00:00:00  0.270533  0.691041
+        NaT                  0.220405  0.811951
+        2022-05-04 00:00:01  0.010527  0.561204
+        2022-05-11 00:00:00  0.813726  0.745100
+        >>> df.resample("3D").max().sort_index()
+                           A         B
+        2022-05-01  0.420538  0.859182
+        2022-05-04  0.270533  0.691041
+        2022-05-07       NaN       NaN
+        2022-05-10  0.813726  0.745100
+        """
+        return self._handle_output(self._downsample("max"))
+
+    def sum(self) -> FrameLike:
+        """
+        Compute sum of resampled values.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from datetime import datetime
+        >>> np.random.seed(22)
+        >>> dates = [
+        ...    datetime(2022, 5, 1, 4, 5, 6),
+        ...    datetime(2022, 5, 3),
+        ...    datetime(2022, 5, 3, 23, 59, 59),
+        ...    datetime(2022, 5, 4),
+        ...    pd.NaT,
+        ...    datetime(2022, 5, 4, 0, 0, 1),
+        ...    datetime(2022, 5, 11),
+        ... ]
+        >>> df = ps.DataFrame(
+        ...    np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=["A", "B"]
+        ... )
+        >>> df
+                                    A         B
+        2022-05-01 04:05:06  0.208461  0.481681
+        2022-05-03 00:00:00  0.420538  0.859182
+        2022-05-03 23:59:59  0.171162  0.338864
+        2022-05-04 00:00:00  0.270533  0.691041
+        NaT                  0.220405  0.811951
+        2022-05-04 00:00:01  0.010527  0.561204
+        2022-05-11 00:00:00  0.813726  0.745100
+        >>> df.resample("3D").sum().sort_index()
+                           A         B
+        2022-05-01  0.800160  1.679727
+        2022-05-04  0.281060  1.252245
+        2022-05-07  0.000000  0.000000
+        2022-05-10  0.813726  0.745100
+        """
+        return self._handle_output(self._downsample("sum").fillna(0.0))
+
+    def mean(self) -> FrameLike:
+        """
+        Compute mean of resampled values.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from datetime import datetime
+        >>> np.random.seed(22)
+        >>> dates = [
+        ...    datetime(2022, 5, 1, 4, 5, 6),
+        ...    datetime(2022, 5, 3),
+        ...    datetime(2022, 5, 3, 23, 59, 59),
+        ...    datetime(2022, 5, 4),
+        ...    pd.NaT,
+        ...    datetime(2022, 5, 4, 0, 0, 1),
+        ...    datetime(2022, 5, 11),
+        ... ]
+        >>> df = ps.DataFrame(
+        ...    np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=["A", "B"]
+        ... )
+        >>> df
+                                    A         B
+        2022-05-01 04:05:06  0.208461  0.481681
+        2022-05-03 00:00:00  0.420538  0.859182
+        2022-05-03 23:59:59  0.171162  0.338864
+        2022-05-04 00:00:00  0.270533  0.691041
+        NaT                  0.220405  0.811951
+        2022-05-04 00:00:01  0.010527  0.561204
+        2022-05-11 00:00:00  0.813726  0.745100
+        >>> df.resample("3D").mean().sort_index()
+                           A         B
+        2022-05-01  0.266720  0.559909
+        2022-05-04  0.140530  0.626123
+        2022-05-07       NaN       NaN
+        2022-05-10  0.813726  0.745100
+        """
+        return self._handle_output(self._downsample("mean"))
+
+    def std(self) -> FrameLike:
+        """
+        Compute std of resampled values.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from datetime import datetime
+        >>> np.random.seed(22)
+        >>> dates = [
+        ...    datetime(2022, 5, 1, 4, 5, 6),
+        ...    datetime(2022, 5, 3),
+        ...    datetime(2022, 5, 3, 23, 59, 59),
+        ...    datetime(2022, 5, 4),
+        ...    pd.NaT,
+        ...    datetime(2022, 5, 4, 0, 0, 1),
+        ...    datetime(2022, 5, 11),
+        ... ]
+        >>> df = ps.DataFrame(
+        ...    np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=["A", "B"]
+        ... )
+        >>> df
+                                    A         B
+        2022-05-01 04:05:06  0.208461  0.481681
+        2022-05-03 00:00:00  0.420538  0.859182
+        2022-05-03 23:59:59  0.171162  0.338864
+        2022-05-04 00:00:00  0.270533  0.691041
+        NaT                  0.220405  0.811951
+        2022-05-04 00:00:01  0.010527  0.561204
+        2022-05-11 00:00:00  0.813726  0.745100
+        >>> df.resample("3D").std().sort_index()
+                           A         B
+        2022-05-01  0.134509  0.268835
+        2022-05-04  0.183852  0.091809
+        2022-05-07       NaN       NaN
+        2022-05-10       NaN       NaN
+        """
+        return self._handle_output(self._downsample("std"))
+
+    def var(self) -> FrameLike:
+        """
+        Compute var of resampled values.
+
+        .. versionadded:: 3.4.0
+
+        See Also
+        --------
+        pyspark.pandas.Series.groupby
+        pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from datetime import datetime
+        >>> np.random.seed(22)
+        >>> dates = [
+        ...    datetime(2022, 5, 1, 4, 5, 6),
+        ...    datetime(2022, 5, 3),
+        ...    datetime(2022, 5, 3, 23, 59, 59),
+        ...    datetime(2022, 5, 4),
+        ...    pd.NaT,
+        ...    datetime(2022, 5, 4, 0, 0, 1),
+        ...    datetime(2022, 5, 11),
+        ... ]
+        >>> df = ps.DataFrame(
+        ...    np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=["A", "B"]
+        ... )
+        >>> df
+                                    A         B
+        2022-05-01 04:05:06  0.208461  0.481681
+        2022-05-03 00:00:00  0.420538  0.859182
+        2022-05-03 23:59:59  0.171162  0.338864
+        2022-05-04 00:00:00  0.270533  0.691041
+        NaT                  0.220405  0.811951
+        2022-05-04 00:00:01  0.010527  0.561204
+        2022-05-11 00:00:00  0.813726  0.745100
+        >>> df.resample("3D").var().sort_index()
+                           A         B
+        2022-05-01  0.018093  0.072272
+        2022-05-04  0.033802  0.008429
+        2022-05-07       NaN       NaN
+        2022-05-10       NaN       NaN
+        """
+        return self._handle_output(self._downsample("var"))
+
 
 class DataFrameResampler(Resampler[DataFrame]):
     def __init__(
@@ -435,29 +731,14 @@ class DataFrameResampler(Resampler[DataFrame]):
             else:
                 return partial(property_or_func, self)
 
-    def min(self) -> DataFrame:
-        return self._downsample("min")
-
-    def max(self) -> DataFrame:
-        return self._downsample("max")
-
-    def sum(self) -> DataFrame:
-        return self._downsample("sum").fillna(0.0)
-
-    def mean(self) -> DataFrame:
-        return self._downsample("mean")
-
-    def std(self) -> DataFrame:
-        return self._downsample("std")
-
-    def var(self) -> DataFrame:
-        return self._downsample("var")
+    def _handle_output(self, psdf: DataFrame) -> DataFrame:
+        return psdf
 
 
 class SeriesResampler(Resampler[Series]):
     def __init__(
         self,
-        psdf: DataFrame,
+        psser: Series,
         resamplekey: Optional[Series],
         rule: str,
         closed: Optional[str] = None,
@@ -465,13 +746,14 @@ class SeriesResampler(Resampler[Series]):
         agg_columns: List[Series] = [],
     ):
         super().__init__(
-            psdf=psdf,
+            psdf=psser._psdf,
             resamplekey=resamplekey,
             rule=rule,
             closed=closed,
             label=label,
             agg_columns=agg_columns,
         )
+        self._psser = psser
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeSeriesResampler, item):
@@ -481,20 +763,35 @@ class SeriesResampler(Resampler[Series]):
             else:
                 return partial(property_or_func, self)
 
-    def min(self) -> Series:
-        return first_series(self._downsample("min"))
+    def _handle_output(self, psdf: DataFrame) -> Series:
+        return first_series(psdf).rename(self._psser.name)
 
-    def max(self) -> Series:
-        return first_series(self._downsample("max"))
 
-    def sum(self) -> Series:
-        return first_series(self._downsample("sum").fillna(0.0))
+def _test() -> None:
+    import os
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+    import pyspark.pandas.resample
 
-    def mean(self) -> Series:
-        return first_series(self._downsample("mean"))
+    os.chdir(os.environ["SPARK_HOME"])
 
-    def std(self) -> Series:
-        return first_series(self._downsample("std"))
+    globs = pyspark.pandas.resample.__dict__.copy()
+    globs["ps"] = pyspark.pandas
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .appName("pyspark.pandas.resample tests")
+        .getOrCreate()
+    )
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.pandas.resample,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
 
-    def var(self) -> Series:
-        return first_series(self._downsample("var"))
+
+if __name__ == "__main__":
+    _test()

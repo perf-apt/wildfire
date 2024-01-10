@@ -55,12 +55,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'test'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -88,12 +88,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'foo'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -129,12 +129,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'yeah'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -170,12 +170,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'nay'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -195,12 +195,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'on'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -220,12 +220,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'off'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -245,12 +245,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'of'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -270,12 +270,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'o'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -295,12 +295,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'on_'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -320,12 +320,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'off_'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -353,12 +353,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'11'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -386,12 +386,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'000'",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -411,12 +411,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "''",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -533,12 +533,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'  tru e '",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -558,12 +558,12 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "42000",
+  "sqlState" : "22018",
   "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "''",
     "sourceType" : "\"STRING\"",
-    "targetType" : "\"BOOLEAN\"",
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -716,11 +716,20 @@ INSERT INTO BOOLTBL2
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-failed to evaluate expression CAST('XXX' AS BOOLEAN): [CAST_INVALID_INPUT] The value 'XXX' of the type "STRING" cannot be cast to "BOOLEAN" because it is malformed. Correct the value as per the syntax, or change its target type. Use `try_cast` to tolerate malformed input and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
-== SQL(line 2, position 12) ==
-   VALUES (boolean('XXX'))
-           ^^^^^^^^^^^^^^
-; line 2 pos 3
+{
+  "errorClass" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "sqlExpr" : "\"XXX\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 47,
+    "fragment" : "VALUES (boolean('XXX'))"
+  } ]
+}
 
 
 -- !query

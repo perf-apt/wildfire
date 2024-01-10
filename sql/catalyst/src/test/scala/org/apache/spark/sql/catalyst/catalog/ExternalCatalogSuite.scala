@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -420,6 +421,9 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     val partition2 =
       CatalogTablePartition(Map("partCol1" -> "3", "partCol2" -> "4"),
         storageFormat.copy(locationUri = Some(newLocationPart2)))
+    assert(!exists(newLocationPart1))
+    assert(!exists(newLocationPart2))
+
     catalog.createPartitions("db1", "tbl", Seq(partition1), ignoreIfExists = false)
     catalog.createPartitions("db1", "tbl", Seq(partition2), ignoreIfExists = false)
 
@@ -470,6 +474,31 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     // if no partition is matched for the given partition spec, an empty list should be returned.
     assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown", "b" -> "1"))).isEmpty)
     assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown"))).isEmpty)
+  }
+
+  test("SPARK-45054: list partitions should restore stats") {
+    val catalog = newBasicCatalog()
+    val stats = Some(CatalogStatistics(sizeInBytes = 1))
+    val newPart = CatalogTablePartition(Map("a" -> "1", "b" -> "2"), storageFormat, stats = stats)
+    catalog.alterPartitions("db2", "tbl2", Seq(newPart))
+    val parts = catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "1")))
+
+    assert(parts.length == 1)
+    val part = parts.head
+    assert(part.stats.exists(_.sizeInBytes == 1))
+  }
+
+  test("SPARK-45054: list partitions by filter should restore stats") {
+    val catalog = newBasicCatalog()
+    val stats = Some(CatalogStatistics(sizeInBytes = 1))
+    val newPart = CatalogTablePartition(Map("a" -> "1", "b" -> "2"), storageFormat, stats = stats)
+    catalog.alterPartitions("db2", "tbl2", Seq(newPart))
+    val tz = TimeZone.getDefault.getID
+    val parts = catalog.listPartitionsByFilter("db2", "tbl2", Seq($"a".int === 1), tz)
+
+    assert(parts.length == 1)
+    val part = parts.head
+    assert(part.stats.exists(_.sizeInBytes == 1))
   }
 
   test("SPARK-21457: list partitions with special chars") {
@@ -540,7 +569,11 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
         // HiveExternalCatalog may be the first one to notice and throw an exception, which will
         // then be caught and converted to a RuntimeException with a descriptive message.
         case ex: RuntimeException if ex.getMessage.contains("MetaException") =>
-          throw new AnalysisException(ex.getMessage)
+          throw new AnalysisException(
+            errorClass = "_LEGACY_ERROR_TEMP_2193",
+            messageParameters = Map(
+              "hiveMetastorePartitionPruningFallbackOnException" ->
+                SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key))
       }
     }
   }
@@ -842,6 +875,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
   test("create/drop database should create/delete the directory") {
     val catalog = newBasicCatalog()
     val db = newDb("mydb")
+    assert(!exists(db.locationUri))
     catalog.createDatabase(db, ignoreIfExists = false)
     assert(exists(db.locationUri))
 
@@ -859,7 +893,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
       schema = new StructType().add("a", "int").add("b", "string"),
       provider = Some(defaultProvider)
     )
-
+    assert(!exists(db.locationUri, "my_table"))
     catalog.createTable(table, ignoreIfExists = false)
     assert(exists(db.locationUri, "my_table"))
 
@@ -1015,11 +1049,19 @@ abstract class CatalogTestUtils {
 
   def newFunc(): CatalogFunction = newFunc("funcName")
 
-  def newUriForDatabase(): URI = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
+  def newUriForDatabase(): URI = {
+    val file = Utils.createTempDir()
+    val uri = new URI(file.toURI.toString.stripSuffix("/"))
+    Utils.deleteRecursively(file)
+    uri
+  }
 
   def newUriForPartition(parts: Seq[String]): URI = {
-    val path = parts.foldLeft(Utils.createTempDir())(new java.io.File(_, _))
-    new URI(path.toURI.toString.stripSuffix("/"))
+    val file = Utils.createTempDir()
+    val path = parts.foldLeft(file)(new java.io.File(_, _))
+    val uri = new URI(path.toURI.toString.stripSuffix("/"))
+    Utils.deleteRecursively(file)
+    uri
   }
 
   def newDb(name: String): CatalogDatabase = {

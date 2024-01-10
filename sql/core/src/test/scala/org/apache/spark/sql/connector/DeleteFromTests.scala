@@ -80,7 +80,7 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
         sql(s"DELETE FROM $t WHERE id IN (SELECT id FROM $t)")
       }
 
-      assert(spark.table(t).count === 3)
+      assert(spark.table(t).count() === 3)
       assert(exc.getMessage.contains("Delete by condition with subquery is not supported"))
     }
   }
@@ -94,7 +94,7 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
         sql(s"DELETE FROM $t WHERE id > 3 AND p > 3")
       }
 
-      assert(spark.table(t).count === 3)
+      assert(spark.table(t).count() === 3)
       assert(exc.getMessage.contains(s"Cannot delete from table $t"))
     }
   }
@@ -112,8 +112,7 @@ trait DeleteFromTests extends DatasourceV2SQLBase {
 
       checkError(
         exception = exc,
-        errorClass = "UNSUPPORTED_FEATURE",
-        errorSubClass = "TABLE_OPERATION",
+        errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
         sqlState = "0A000",
         parameters = Map("tableName" -> "`spark_catalog`.`default`.`tbl`",
           "operation" -> "DELETE"))

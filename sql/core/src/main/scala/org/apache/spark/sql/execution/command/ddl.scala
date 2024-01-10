@@ -37,8 +37,10 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -49,6 +51,7 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 // Note: The definition of these commands are based on the ones described in
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
@@ -203,7 +206,8 @@ case class DescribeDatabaseCommand(
 }
 
 /**
- * Drops a table/view from the metastore and removes it if it is cached.
+ * Drops a table/view from the metastore and removes it if it is cached. This command does not drop
+ * temp views, which should be handled by [[DropTempViewCommand]].
  *
  * The syntax of this command is:
  * {{{
@@ -219,26 +223,33 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val isTempView = catalog.isTempView(tableName)
 
-    if (!isTempView && catalog.tableExists(tableName)) {
+    if (catalog.tableExists(tableName)) {
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
       // issue an exception.
       catalog.getTableMetadata(tableName).tableType match {
         case CatalogTableType.VIEW if !isView =>
-          throw QueryCompilationErrors.cannotDropViewWithDropTableError()
+          throw QueryCompilationErrors.wrongCommandForObjectTypeError(
+            operation = "DROP TABLE",
+            requiredType = s"${CatalogTableType.EXTERNAL.name} or ${CatalogTableType.MANAGED.name}",
+            objectName = catalog.getTableMetadata(tableName).qualifiedName,
+            foundType = catalog.getTableMetadata(tableName).tableType.name,
+            alternative = "DROP VIEW"
+          )
         case o if o != CatalogTableType.VIEW && isView =>
-          throw QueryCompilationErrors.cannotDropViewWithDropTableError()
+          throw QueryCompilationErrors.wrongCommandForObjectTypeError(
+            operation = "DROP VIEW",
+            requiredType = CatalogTableType.VIEW.name,
+            objectName = catalog.getTableMetadata(tableName).qualifiedName,
+            foundType = o.name,
+            alternative = "DROP TABLE"
+          )
         case _ =>
       }
-    }
 
-    if (isTempView || catalog.tableExists(tableName)) {
       try {
-        val hasViewText = isTempView &&
-          catalog.getTempViewOrPermanentTableMetadata(tableName).viewText.isDefined
         sparkSession.sharedState.cacheManager.uncacheQuery(
-          sparkSession.table(tableName), cascade = !isTempView || hasViewText)
+          sparkSession.table(tableName), cascade = true)
       } catch {
         case NonFatal(e) => log.warn(e.toString, e)
       }
@@ -247,7 +258,28 @@ case class DropTableCommand(
     } else if (ifExists) {
       // no-op
     } else {
-      throw QueryCompilationErrors.tableOrViewNotFoundError(tableName.identifier)
+      throw QueryCompilationErrors.noSuchTableError(
+        tableName.catalog.toSeq ++ tableName.database :+ tableName.table)
+    }
+    Seq.empty[Row]
+  }
+}
+
+case class DropTempViewCommand(ident: Identifier) extends LeafRunnableCommand {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    assert(ident.namespace().isEmpty || ident.namespace().length == 1)
+    val nameParts = (ident.namespace() :+ ident.name()).toImmutableArraySeq
+    val catalog = sparkSession.sessionState.catalog
+    catalog.getRawLocalOrGlobalTempView(nameParts).foreach { view =>
+      val hasViewText = view.tableMeta.viewText.isDefined
+      sparkSession.sharedState.cacheManager.uncacheTableOrView(
+        sparkSession, nameParts, cascade = hasViewText)
+      view.refresh()
+      if (ident.namespace().isEmpty) {
+        catalog.dropTempView(ident.name())
+      } else {
+        catalog.dropGlobalTempView(ident.name())
+      }
     }
     Seq.empty[Row]
   }
@@ -304,10 +336,11 @@ case class AlterTableUnsetPropertiesCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
     if (!ifExists) {
-      propKeys.foreach { k =>
-        if (!table.properties.contains(k) && k != TableCatalog.PROP_COMMENT) {
-          throw QueryCompilationErrors.unsetNonExistentPropertyError(k, table.identifier)
-        }
+      val nonexistentKeys = propKeys.filter(key => !table.properties.contains(key)
+        && key != TableCatalog.PROP_COMMENT)
+      if (nonexistentKeys.nonEmpty) {
+        throw QueryCompilationErrors.unsetNonExistentPropertiesError(
+          nonexistentKeys, table.identifier)
       }
     }
     // If comment is in the table property, we reset it to None
@@ -341,23 +374,30 @@ case class AlterTableChangeColumnCommand(
   // TODO: support change column name/dataType/metadata/position.
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    // This command may change column default values, so we need to refresh the table relation cache
+    // here so that DML commands can resolve these default values correctly.
+    catalog.refreshTable(tableName)
     val table = catalog.getTableRawMetadata(tableName)
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
+    // Check that the column is not a partition column
+    if (table.partitionSchema.fieldNames.exists(resolver(columnName, _))) {
+        throw QueryCompilationErrors.cannotAlterPartitionColumn(table.qualifiedName, columnName)
+    }
     // Find the origin column from dataSchema by column name.
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
       throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForColumnTypeError(
-        originColumn, newColumn)
+        toSQLId(table.identifier.nameParts), originColumn, newColumn)
     }
 
     val newDataSchema = table.dataSchema.fields.map { field =>
       if (field.name == originColumn.name) {
         // Create a new column from the origin column with the new comment.
         val withNewComment: StructField =
-          addComment(field, newColumn.getComment)
+          addComment(field, newColumn.getComment())
         // Create a new column from the origin column with the new current default value.
         if (newColumn.getCurrentDefaultValue().isDefined) {
           if (newColumn.getCurrentDefaultValue().get.nonEmpty) {
@@ -671,17 +711,17 @@ case class RepairTableCommand(
       val partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)] =
         try {
           scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
-            spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool)).seq
+            spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool))
         } finally {
           evalPool.shutdown()
         }
       val total = partitionSpecsAndLocs.length
       logInfo(s"Found $total partitions in $root")
 
-      val partitionStats = if (spark.sqlContext.conf.gatherFastStats) {
+      val partitionStats = if (spark.sessionState.conf.gatherFastStats) {
         gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
       } else {
-        Map.empty[String, PartitionStatistics]
+        Map.empty[Path, PartitionStatistics]
       }
       logInfo(s"Finished to gather the fast stats for all $total partitions.")
 
@@ -723,11 +763,13 @@ case class RepairTableCommand(
     val statusPar: Seq[FileStatus] =
       if (partitionNames.length > 1 && statuses.length > threshold || partitionNames.length > 2) {
         // parallelize the list of partitions here, then we can have better parallelism later.
+        // scalastyle:off parvector
         val parArray = new ParVector(statuses.toVector)
         parArray.tasksupport = evalTaskSupport
+        // scalastyle:on parvector
         parArray.seq
       } else {
-        statuses
+        statuses.toImmutableArraySeq
       }
     statusPar.flatMap { st =>
       val name = st.getPath.getName
@@ -756,32 +798,33 @@ case class RepairTableCommand(
       partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)],
       fs: FileSystem,
       pathFilter: PathFilter,
-      threshold: Int): Map[String, PartitionStatistics] = {
-    if (partitionSpecsAndLocs.length > threshold) {
+      threshold: Int): Map[Path, PartitionStatistics] = {
+    val partitionNum = partitionSpecsAndLocs.length
+    if (partitionNum > threshold) {
       val hadoopConf = spark.sessionState.newHadoopConf()
       val serializableConfiguration = new SerializableConfiguration(hadoopConf)
-      val serializedPaths = partitionSpecsAndLocs.map(_._2.toString).toArray
+      val locations = partitionSpecsAndLocs.map(_._2)
 
       // Set the number of parallelism to prevent following file listing from generating many tasks
       // in case of large #defaultParallelism.
-      val numParallelism = Math.min(serializedPaths.length,
+      val numParallelism = Math.min(partitionNum,
         Math.min(spark.sparkContext.defaultParallelism, 10000))
       // gather the fast stats for all the partitions otherwise Hive metastore will list all the
       // files for all the new partitions in sequential way, which is super slow.
       logInfo(s"Gather the fast stats in parallel using $numParallelism tasks.")
-      spark.sparkContext.parallelize(serializedPaths, numParallelism)
-        .mapPartitions { paths =>
+      spark.sparkContext.parallelize(locations, numParallelism)
+        .mapPartitions { locationsEachPartition =>
           val pathFilter = getPathFilter(serializableConfiguration.value)
-          paths.map(new Path(_)).map{ path =>
-            val fs = path.getFileSystem(serializableConfiguration.value)
-            val statuses = fs.listStatus(path, pathFilter)
-            (path.toString, PartitionStatistics(statuses.length, statuses.map(_.getLen).sum))
+          locationsEachPartition.map { location =>
+            val fs = location.getFileSystem(serializableConfiguration.value)
+            val statuses = fs.listStatus(location, pathFilter)
+            (location, PartitionStatistics(statuses.length, statuses.map(_.getLen).sum))
           }
         }.collectAsMap().toMap
     } else {
       partitionSpecsAndLocs.map { case (_, location) =>
         val statuses = fs.listStatus(location, pathFilter)
-        (location.toString, PartitionStatistics(statuses.length, statuses.map(_.getLen).sum))
+        (location, PartitionStatistics(statuses.length, statuses.map(_.getLen).sum))
       }.toMap
     }
   }
@@ -790,7 +833,7 @@ case class RepairTableCommand(
       spark: SparkSession,
       table: CatalogTable,
       partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)],
-      partitionStats: Map[String, PartitionStatistics]): Unit = {
+      partitionStats: Map[Path, PartitionStatistics]): Unit = {
     val total = partitionSpecsAndLocs.length
     var done = 0L
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
@@ -800,7 +843,7 @@ case class RepairTableCommand(
     partitionSpecsAndLocs.iterator.grouped(batchSize).foreach { batch =>
       val now = MILLISECONDS.toSeconds(System.currentTimeMillis())
       val parts = batch.map { case (spec, location) =>
-        val params = partitionStats.get(location.toString).map {
+        val params = partitionStats.get(location).map {
           case PartitionStatistics(numFiles, totalSize) =>
             // This two fast stat could prevent Hive metastore to list the files again.
             Map(NUM_FILES -> numFiles.toString,
@@ -907,8 +950,8 @@ object DDLUtils extends Logging {
     HiveTableRelation(
       table,
       // Hive table columns are always nullable.
-      table.dataSchema.asNullable.toAttributes,
-      table.partitionSchema.asNullable.toAttributes)
+      toAttributes(table.dataSchema.asNullable),
+      toAttributes(table.partitionSchema.asNullable))
   }
 
   /**
@@ -917,7 +960,7 @@ object DDLUtils extends Logging {
   def verifyPartitionProviderIsHive(
       spark: SparkSession, table: CatalogTable, action: String): Unit = {
     val tableName = table.identifier.table
-    if (!spark.sqlContext.conf.manageFilesourcePartitions && isDatasourceTable(table)) {
+    if (!spark.sessionState.conf.manageFilesourcePartitions && isDatasourceTable(table)) {
       throw QueryCompilationErrors
         .actionNotAllowedOnTableWithFilesourcePartitionManagementDisabledError(action, tableName)
     }
@@ -962,7 +1005,7 @@ object DDLUtils extends Logging {
         case HIVE_PROVIDER =>
           val serde = table.storage.serde
           if (schema.exists(_.dataType.isInstanceOf[AnsiIntervalType])) {
-            throw hiveTableWithAnsiIntervalsError(table.identifier.toString)
+            throw hiveTableWithAnsiIntervalsError(table.identifier)
           } else if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
             checkDataColNames("orc", schema)
           } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
@@ -991,7 +1034,8 @@ object DDLUtils extends Logging {
     source match {
       case f: FileFormat => DataSourceUtils.checkFieldNames(f, schema)
       case f: FileDataSourceV2 =>
-        DataSourceUtils.checkFieldNames(f.fallbackFileFormat.newInstance(), schema)
+        DataSourceUtils.checkFieldNames(
+          f.fallbackFileFormat.getDeclaredConstructor().newInstance(), schema)
       case _ =>
     }
   }
@@ -999,14 +1043,22 @@ object DDLUtils extends Logging {
   /**
    * Throws exception if outputPath tries to overwrite inputpath.
    */
-  def verifyNotReadPath(query: LogicalPlan, outputPath: Path) : Unit = {
+  def verifyNotReadPath(
+      query: LogicalPlan,
+      outputPath: Path,
+      table: Option[CatalogTable] = None) : Unit = {
     val inputPaths = query.collect {
       case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
         r.location.rootPaths
     }.flatten
 
     if (inputPaths.contains(outputPath)) {
-      throw QueryCompilationErrors.cannotOverwritePathBeingReadFromError()
+      table match {
+        case Some(v) =>
+          throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(v.identifier)
+        case _ =>
+          throw QueryCompilationErrors.cannotOverwritePathBeingReadFromError(outputPath.toString)
+      }
     }
   }
 }

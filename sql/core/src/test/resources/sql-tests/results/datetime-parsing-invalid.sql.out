@@ -15,11 +15,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "datetime" : "'1'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'1'"
   }
 }
 
@@ -39,11 +39,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "datetime" : "'123'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'123'"
   }
 }
 
@@ -55,11 +55,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "datetime" : "'1'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'1'"
   }
 }
 
@@ -71,11 +71,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "DATETIME_PATTERN_RECOGNITION",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "pattern" : "'yyyyyyy'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "pattern" : "'yyyyyyy'"
   }
 }
 
@@ -95,11 +96,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "datetime" : "'9'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'9'"
   }
 }
 
@@ -111,11 +112,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "datetime" : "'9'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'9'"
   }
 }
 
@@ -127,11 +128,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "datetime" : "'99'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'99'"
   }
 }
 
@@ -199,11 +200,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
-  "errorSubClass" : "PARSE_DATETIME_BY_NEW_PARSER",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+  "sqlState" : "42K0B",
   "messageParameters" : {
-    "datetime" : "'2018-366'",
-    "config" : "\"spark.sql.legacy.timeParserPolicy\""
+    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
+    "datetime" : "'2018-366'"
   }
 }
 

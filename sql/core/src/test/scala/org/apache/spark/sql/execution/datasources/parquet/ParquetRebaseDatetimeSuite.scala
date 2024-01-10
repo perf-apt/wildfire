@@ -23,11 +23,12 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{QueryTest, Row, SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, ParquetOutputTimestampType}
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.{CORRECTED, EXCEPTION, LEGACY}
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy.{CORRECTED, EXCEPTION, LEGACY}
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.SlowSQLTest
 
 abstract class ParquetRebaseDatetimeSuite
   extends QueryTest
@@ -172,9 +173,9 @@ abstract class ParquetRebaseDatetimeSuite
       assert(e.getCause.isInstanceOf[SparkUpgradeException])
     }
     Seq(
-      // By default we should fail to read ancient datetime values when parquet files don't
+      // By default we should not fail to read ancient datetime values when parquet files don't
       // contain Spark version.
-      "2_4_5" -> failInRead _,
+      "2_4_5" -> successInRead _,
       "2_4_6" -> successInRead _,
       "3_2_0" -> successInRead _).foreach { case (version, checkDefaultRead) =>
       withAllParquetReaders {
@@ -200,7 +201,7 @@ abstract class ParquetRebaseDatetimeSuite
       }
     }
     Seq(
-      "2_4_5" -> failInRead _,
+      "2_4_5" -> successInRead _,
       "2_4_6" -> successInRead _).foreach { case (version, checkDefaultRead) =>
       withAllParquetReaders {
         Seq("plain", "dict").foreach { enc =>
@@ -413,7 +414,7 @@ abstract class ParquetRebaseDatetimeSuite
         val e = intercept[SparkException] {
           df.write.parquet(dir.getCanonicalPath)
         }
-        val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
         assert(errMsg.contains("You may get a different result due to the upgrading"))
       }
     }
@@ -429,7 +430,7 @@ abstract class ParquetRebaseDatetimeSuite
           val e = intercept[SparkException] {
             df.write.parquet(dir.getCanonicalPath)
           }
-          val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+          val errMsg = e.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
           assert(errMsg.contains("You may get a different result due to the upgrading"))
         }
       }
@@ -461,6 +462,7 @@ abstract class ParquetRebaseDatetimeSuite
   }
 }
 
+@SlowSQLTest
 class ParquetRebaseDatetimeV1Suite extends ParquetRebaseDatetimeSuite {
   override protected def sparkConf: SparkConf =
     super
@@ -468,6 +470,7 @@ class ParquetRebaseDatetimeV1Suite extends ParquetRebaseDatetimeSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 }
 
+@SlowSQLTest
 class ParquetRebaseDatetimeV2Suite extends ParquetRebaseDatetimeSuite {
   override protected def sparkConf: SparkConf =
     super

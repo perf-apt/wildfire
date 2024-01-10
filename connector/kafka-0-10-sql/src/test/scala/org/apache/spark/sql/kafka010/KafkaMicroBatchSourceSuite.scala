@@ -24,27 +24,31 @@ import java.util.{Locale, Optional}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
+import scala.collection.mutable.ListBuffer
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.commons.io.FileUtils
 import org.apache.kafka.clients.producer.{ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
+import org.scalatest.matchers.should._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.TestUtils
 import org.apache.spark.sql.{Dataset, ForeachWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED}
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
-import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.functions.{count, expr, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
-import org.apache.spark.sql.streaming.{StreamingQuery, StreamTest, Trigger}
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -150,7 +154,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with K
       }
 
       val offset = KafkaSourceOffset(testUtils.getLatestOffsets(topics))
-      logInfo(s"Added data, expected offset $offset")
+      logInfo(s"Added data to topic: $topic, expected offset: $offset")
       (kafkaSource, offset)
     }
 
@@ -179,13 +183,13 @@ abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with K
   protected def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 }
 
-abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
+abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with Matchers {
 
   import testImplicits._
 
   private def waitUntilBatchProcessed(clock: StreamManualClock) = AssertOnQuery { q =>
     eventually(Timeout(streamingTimeout)) {
-      if (!q.exception.isDefined) {
+      if (q.exception.isEmpty) {
         assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
       }
     }
@@ -193,6 +197,89 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       throw q.exception.get
     }
     true
+  }
+
+  /**
+   * Test async progress tracking capability with Kafka source and sink
+   */
+  test("async progress tracking") {
+    val inputTopic = newTopic()
+    testUtils.createTopic(inputTopic, partitions = 5)
+
+    val dataSent = new ListBuffer[String]()
+    testUtils.sendMessages(inputTopic, (0 until 15).map { case x =>
+      val m = s"foo-$x"
+      dataSent += m
+      m
+    }.toArray, Some(0))
+
+    val outputTopic = newTopic()
+    testUtils.createTopic(outputTopic, partitions = 5)
+
+    withTempDir { dir =>
+      val reader = spark
+        .readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.metadata.max.age.ms", "1")
+        .option("maxOffsetsPerTrigger", 5)
+        .option("subscribe", inputTopic)
+        .option("startingOffsets", "earliest")
+        .load()
+
+      def startQuery(): StreamingQuery = {
+        reader.writeStream
+          .format("kafka")
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .option("kafka.max.block.ms", "5000")
+          .option("topic", outputTopic)
+          .option("checkpointLocation", dir.getCanonicalPath)
+          .option(ASYNC_PROGRESS_TRACKING_ENABLED, true)
+          .option(ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, 1000)
+          .queryName("kafkaStream")
+          .start()
+      }
+
+      def readResults(): List[String] = {
+        spark.read
+          .format("kafka")
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .option("startingOffsets", "earliest")
+          .option("subscribe", outputTopic)
+          .load()
+          .select(expr("CAST(value AS string)"))
+          .toDF()
+          .collect().map(_.getAs[String]("value")).toList
+      }
+
+      val query = startQuery()
+      try {
+        query.processAllAvailable()
+      } finally {
+        query.stop()
+      }
+
+      val data = readResults()
+      data should equal (dataSent)
+
+      // Restart query
+
+      testUtils.sendMessages(inputTopic, (15 until 30).map { case x =>
+        val m = s"foo-$x"
+        dataSent += m
+        m
+      }.toArray, Some(0))
+
+      val query2 = startQuery()
+      try {
+        query2.processAllAvailable()
+      } finally {
+        query2.stop()
+      }
+
+      val data2 = readResults()
+      data2.toSet should equal (dataSent.toSet)
+    }
   }
 
   test("Trigger.AvailableNow") {
@@ -234,6 +321,114 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     assert(index == 3)
   }
 
+  test("Query with Trigger.AvailableNow should throw error when topic partitions got unavailable " +
+    "during subsequent batches") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 5)
+
+    testUtils.sendMessages(topic, (0 until 15).map { case x =>
+      s"foo-$x"
+    }.toArray, Some(0))
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("maxOffsetsPerTrigger", 5)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      // the query should fail regardless of this option
+      .option("failOnDataLoss", "true")
+      .load()
+
+    def startTriggerAvailableNowQuery(): StreamingQuery = {
+      reader.writeStream
+        .foreachBatch((_: Dataset[Row], batchId: Long) => {
+          testUtils.deleteTopic(topic)
+          // create partitions less than the kafka data source figured out as an end state
+          testUtils.createTopic(topic, partitions = 3)
+          // offset will keep the same
+          testUtils.sendMessages(topic, (0 until 15).map { case x =>
+            s"foo-$x"
+          }.toArray, Some(0))
+          null.asInstanceOf[Unit]
+        })
+        .trigger(Trigger.AvailableNow)
+        .start()
+    }
+
+    // SPARK-41996 - Increase query termination timeout to ensure that
+    // Kafka operations can be completed
+    val queryTimeout = 300.seconds
+    val exc = intercept[Exception] {
+      val query = startTriggerAvailableNowQuery()
+      try {
+        assert(query.awaitTermination(queryTimeout.toMillis))
+      } finally {
+        query.stop()
+      }
+    }
+    TestUtils.assertExceptionMsg(exc, "Some of partitions in Kafka topic(s) have been lost " +
+      "during running query with Trigger.AvailableNow.")
+    TestUtils.assertExceptionMsg(exc, "topic-partitions for latest offset: ")
+    TestUtils.assertExceptionMsg(exc, "topic-partitions for end offset: ")
+  }
+
+  test("Query with Trigger.AvailableNow should throw error when offset(s) in planned topic " +
+    "partitions got unavailable during subsequent batches") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 5)
+
+    testUtils.sendMessages(topic, (0 until 15).map { case x =>
+      s"foo-$x"
+    }.toArray, Some(0))
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("maxOffsetsPerTrigger", 5)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      // the query should fail regardless of this option
+      .option("failOnDataLoss", "true")
+      .load()
+
+    def startTriggerAvailableNowQuery(): StreamingQuery = {
+      reader.writeStream
+        .foreachBatch((_: Dataset[Row], batchId: Long) => {
+          testUtils.deleteTopic(topic)
+          // the number of topic partitions remain the same
+          testUtils.createTopic(topic, partitions = 5)
+          // the number of available records will change to lower than the end state
+          testUtils.sendMessages(topic, (0 until 10).map { case x =>
+            s"foo-$x"
+          }.toArray, Some(0))
+          null.asInstanceOf[Unit]
+        })
+        .trigger(Trigger.AvailableNow)
+        .start()
+    }
+
+    // SPARK-41996 - Increase query termination timeout to ensure that
+    // Kafka operations can be completed
+    val queryTimeout = 300.seconds
+    val exc = intercept[StreamingQueryException] {
+      val query = startTriggerAvailableNowQuery()
+      try {
+        assert(query.awaitTermination(queryTimeout.toMillis))
+      } finally {
+        query.stop()
+      }
+    }
+    TestUtils.assertExceptionMsg(exc, "Some of partitions in Kafka topic(s) report available" +
+      " offset which is less than end offset during running query with Trigger.AvailableNow.")
+    TestUtils.assertExceptionMsg(exc, "latest offset: ")
+    TestUtils.assertExceptionMsg(exc, "end offset: ")
+  }
+
   test("(de)serialization of initial offsets") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 5)
@@ -244,7 +439,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("subscribe", topic)
 
-    testStream(reader.load)(
+    testStream(reader.load())(
       makeSureGetOffsetCalled,
       StopStream,
       StartStream(),
@@ -624,6 +819,45 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       },
       AddKafkaData(Set(topic2), 4, 5, 6),
       CheckAnswer(2, 3, 4, 5, 6, 7)
+    )
+  }
+
+  test("SPARK-41375: empty partitions should not record to latest offset") {
+    val topicPrefix = newTopic()
+    val topic = topicPrefix + "-good"
+    testUtils.createTopic(topic, partitions = 5)
+    testUtils.sendMessages(topic, Array("-1"))
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.request.timeout.ms", "3000")
+      .option("kafka.default.api.timeout.ms", "3000")
+      .option("subscribePattern", s"$topicPrefix-.*")
+      .option("failOnDataLoss", "false")
+
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped = kafka.map(kv => kv._2.toInt + 1)
+
+    testStream(mapped)(
+      makeSureGetOffsetCalled,
+      AddKafkaData(Set(topic), 1, 2, 3),
+      CheckAnswer(2, 3, 4),
+      Assert {
+        testUtils.deleteTopic(topic)
+        true
+      },
+      AssertOnQuery { q =>
+        val latestOffset: Option[(Long, OffsetSeq)] = q.offsetLog.getLatest()
+        latestOffset.exists { offset =>
+          !offset._2.offsets.exists(_.exists(_.json == "{}"))
+        }
+      }
     )
   }
 
@@ -1061,7 +1295,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     // ensure all batches we are waiting for have been processed.
     val waitUntilBatchProcessed = Execute { q =>
       eventually(Timeout(streamingTimeout)) {
-        if (!q.exception.isDefined) {
+        if (q.exception.isEmpty) {
           assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
         }
       }
@@ -1184,7 +1418,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     // ensure all batches we are waiting for have been processed.
     val waitUntilBatchProcessed = Execute { q =>
       eventually(Timeout(streamingTimeout)) {
-        if (!q.exception.isDefined) {
+        if (q.exception.isEmpty) {
           assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
         }
       }
@@ -1453,7 +1687,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaBatchInputPartition])
         withClue(s"minPartitions = $minPartitions generated factories " +
           s"${inputPartitions.mkString("inputPartitions(", ", ", ")")}\n\t") {
-          assert(inputPartitions.size == numPartitionsGenerated)
+          assert(inputPartitions.length == numPartitionsGenerated)
         }
       }
     }
@@ -1555,7 +1789,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
       CheckAnswer(data: _*),
       Execute { query =>
         // The rate limit is 1, so there must be some delay in offsets per partition.
-        val progressWithDelay = query.recentProgress.map(_.sources.head).reverse.find { progress =>
+        val progressWithDelay = query.recentProgress.map(_.sources.head).findLast { progress =>
           // find the metrics that has non-zero average offsetsBehindLatest greater than 0.
           !progress.metrics.isEmpty && progress.metrics.get("avgOffsetsBehindLatest").toDouble > 0
         }
@@ -2060,7 +2294,8 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       Execute { q =>
         // wait to reach the last offset in every partition
         q.awaitOffset(0,
-          KafkaSourceOffset(partitionOffsets.mapValues(_ => 3L).toMap), streamingTimeout.toMillis)
+          KafkaSourceOffset(partitionOffsets.transform((_, _) => 3L)),
+          streamingTimeout.toMillis)
       },
       CheckAnswer(-20, -21, -22, 0, 1, 2, 11, 12, 22),
       StopStream,
@@ -2175,7 +2410,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
 
   private def sendMessagesWithTimestamp(
       topic: String,
-      msgs: Seq[String],
+      msgs: Array[String],
       part: Int,
       ts: Long): Unit = {
     val records = msgs.map { msg =>
@@ -2265,7 +2500,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       .trigger(defaultTrigger)
       .start()
     eventually(timeout(streamingTimeout)) {
-      assert(spark.table("kafkaColumnTypes").count == 1,
+      assert(spark.table("kafkaColumnTypes").count() == 1,
         s"Unexpected results: ${spark.table("kafkaColumnTypes").collectAsList()}")
     }
     val row = spark.table("kafkaColumnTypes").head()
@@ -2456,7 +2691,9 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
     start + Random.nextInt(start + end - 1)
   }
 
-  test("stress test with multiple topics and partitions")  {
+  override val brokerProps = Map("auto.create.topics.enable" -> "false")
+
+  test("stress test with multiple topics and partitions") {
     topics.foreach { topic =>
       testUtils.createTopic(topic, partitions = nextInt(1, 6))
       testUtils.sendMessages(topic, (101 to 105).map { _.toString }.toArray)

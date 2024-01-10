@@ -287,16 +287,20 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   protected def testQuery(tpcdsGroup: String, query: String, suffix: String = ""): Unit = {
     val queryString = resourceToString(s"$tpcdsGroup/$query.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
-    val qe = sql(queryString).queryExecution
-    val plan = qe.executedPlan
-    val explain = normalizeLocation(normalizeIds(qe.explainString(FormattedMode)))
+    // Disable char/varchar read-side handling for better performance.
+    withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      val qe = sql(queryString).queryExecution
+      val plan = qe.executedPlan
+      val explain = normalizeLocation(normalizeIds(qe.explainString(FormattedMode)))
 
-    assert(ValidateRequirements.validate(plan))
+      assert(ValidateRequirements.validate(plan))
 
-    if (regenerateGoldenFiles) {
-      generateGoldenFile(plan, query + suffix, explain)
-    } else {
-      checkWithApproved(plan, query + suffix, explain)
+      if (regenerateGoldenFiles) {
+        generateGoldenFile(plan, query + suffix, explain)
+      } else {
+        checkWithApproved(plan, query + suffix, explain)
+      }
     }
   }
 }

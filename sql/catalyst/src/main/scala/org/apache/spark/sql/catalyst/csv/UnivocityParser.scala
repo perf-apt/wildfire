@@ -28,11 +28,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.catalyst.expressions.{Cast, EmptyRow, ExprUtils, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{daysToMicros, TimeZoneUTC}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -127,15 +126,15 @@ class UnivocityParser(
     options.enableDateTimeParsingFallback
       .orElse(SQLConf.get.csvEnableDateTimeParsingFallback)
       .getOrElse {
-        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
+        SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
           options.timestampFormatInRead.isEmpty
       }
   private val enableParsingFallbackForDateType =
     options.enableDateTimeParsingFallback
       .orElse(SQLConf.get.csvEnableDateTimeParsingFallback)
       .getOrElse {
-        SQLConf.get.legacyTimeParserPolicy == SQLConf.LegacyBehaviorPolicy.LEGACY ||
-          options.dateFormatInRead.isEmpty
+        SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
+          options.dateFormatOption.isEmpty
       }
 
   // Retrieve the raw record string.
@@ -224,7 +223,7 @@ class UnivocityParser(
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility if enabled.
-            if (!enableParsingFallbackForTimestampType) {
+            if (!enableParsingFallbackForDateType) {
               throw e
             }
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
@@ -238,29 +237,19 @@ class UnivocityParser(
           timestampFormatter.parse(datum)
         } catch {
           case NonFatal(e) =>
-            // There may be date type entries in timestamp column due to schema inference
-            if (options.prefersDate) {
-              daysToMicros(dateFormatter.parse(datum), options.zoneId)
-            } else {
-              // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
-              // compatibility if enabled.
-              if (!enableParsingFallbackForDateType) {
-                throw e
-              }
-              val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-              DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw(e))
+            // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
+            // compatibility if enabled.
+            if (!enableParsingFallbackForTimestampType) {
+              throw e
             }
+            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
+            DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw(e))
         }
       }
 
     case _: TimestampNTZType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        try {
-          timestampNTZFormatter.parseWithoutTimeZone(datum, false)
-        } catch {
-          case NonFatal(e) if options.prefersDate =>
-            daysToMicros(dateFormatter.parse(datum), TimeZoneUTC.toZoneId)
-        }
+        timestampNTZFormatter.parseWithoutTimeZone(datum, false)
       }
 
     case _: StringType => (d: String) =>
@@ -329,16 +318,18 @@ class UnivocityParser(
     if (tokens == null) {
       throw BadRecordException(
         () => getCurrentInput,
-        () => None,
-        QueryExecutionErrors.malformedCSVRecordError())
+        () => Array.empty,
+        QueryExecutionErrors.malformedCSVRecordError(""))
     }
+
+    val currentInput = getCurrentInput
 
     var badRecordException: Option[Throwable] = if (tokens.length != parsedSchema.length) {
       // If the number of tokens doesn't match the schema, we should treat it as a malformed record.
       // However, we still have chance to parse some of the tokens. It continues to parses the
       // tokens normally and sets null when `ArrayIndexOutOfBoundsException` occurs for missing
       // tokens.
-      Some(QueryExecutionErrors.malformedCSVRecordError())
+      Some(QueryExecutionErrors.malformedCSVRecordError(currentInput.toString))
     } else None
     // When the length of the returned tokens is identical to the length of the parsed schema,
     // we just need to:
@@ -362,7 +353,7 @@ class UnivocityParser(
         case NonFatal(e) =>
           badRecordException = badRecordException.orElse(Some(e))
           // Use the corresponding DEFAULT value associated with the column, if any.
-          row.update(i, requiredSchema.existenceDefaultValues(i))
+          row.update(i, ResolveDefaultColumns.existenceDefaultValues(requiredSchema)(i))
       }
       i += 1
     }
@@ -371,7 +362,7 @@ class UnivocityParser(
     } else {
       if (badRecordException.isDefined) {
         throw BadRecordException(
-          () => getCurrentInput, () => requiredRow.headOption, badRecordException.get)
+          () => currentInput, () => Array(requiredRow.get), badRecordException.get)
       } else {
         requiredRow
       }

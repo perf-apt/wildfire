@@ -100,8 +100,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
-    val columnPruning = sparkSession.sessionState.conf.csvColumnPruning &&
-      !requiredSchema.exists(_.name == sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    val columnPruning = sparkSession.sessionState.conf.csvColumnPruning
     val parsedOptions = new CSVOptions(
       options,
       columnPruning,
@@ -129,7 +128,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       val schema = if (columnPruning) actualRequiredSchema else actualDataSchema
       val isStartOfFile = file.start == 0
       val headerChecker = new CSVHeaderChecker(
-        schema, parsedOptions, source = s"CSV file: ${file.filePath}", isStartOfFile)
+        schema, parsedOptions, source = s"CSV file: ${file.urlEncodedPath}", isStartOfFile)
       CSVDataSource(parsedOptions).readFile(
         conf,
         file,
@@ -146,6 +145,10 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
   override def equals(other: Any): Boolean = other.isInstanceOf[CSVFileFormat]
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
+    case _: VariantType => false
+
+    case _: BinaryType => false
+
     case _: AtomicType => true
 
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
@@ -154,4 +157,3 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
   }
 
 }
-
