@@ -388,7 +388,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       InferFiltersFromConstraints(x.select($"x.a", $"x.a".as("xa"))
         .where($"xa" <=> $"x.a" && $"xa" === $"x.a").analyze),
       x.select($"x.a", $"x.a".as("xa"))
-        .where($"xa".isNotNull && $"x.a".isNotNull && $"xa" <=> $"x.a" && $"xa" === $"x.a").analyze)
+        .where($"x.a".isNotNull && $"xa" <=> $"x.a" && $"xa" === $"x.a").analyze)
 
     // Once strategy's idempotence is not broken
     val originalQuery =

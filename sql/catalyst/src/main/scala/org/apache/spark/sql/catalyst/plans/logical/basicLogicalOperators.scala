@@ -335,7 +335,18 @@ case class Filter(condition: Expression, child: LogicalPlan)
   override lazy val validConstraints: ExpressionSet = {
     val predicates = splitConjunctivePredicates(condition)
           .filterNot(SubqueryExpression.hasCorrelatedSubquery)
-    child.constraints.union(ExpressionSet(predicates))
+    // remove useless nullsafe filter if any for EqualTo predicates which are present
+    val nullSafePredsToRemove = predicates.flatMap[Expression] {
+        case EqualTo(l: Attribute, r: Attribute) => Seq(EqualNullSafe(l, r))
+
+        case EqualTo(l@Cast(_: Attribute, _, _, _), r: Attribute) => Seq(EqualNullSafe(l, r))
+
+        case EqualTo(l: Attribute, r@Cast(_: Attribute, _, _, _)) => Seq(EqualNullSafe(l, r))
+
+        case _ => Seq.empty
+      }.toSet
+    val netPreds = predicates.filterNot(nullSafePredsToRemove.contains)
+    child.constraints.union(ExpressionSet(netPreds))
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Filter =
