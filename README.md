@@ -1,3 +1,24 @@
+# Wildfire
+## Why another fork?
+Over past 9 years since I dived into apache spark internals, as part of working for SnappyData, WorkDay and presently Cloudera, have come across unsual cases where Query performance have been far from satisfactorily.
+These types of queries have extremely large complex expressions ( like involving case when etc) or very large number of nodes ( like Projects, Filters etc) in a Query Plan . These nodes could run into millions!. Such types of queries usually get generated via some user code, executing in a loop.
+Apache Spark is a brilliantly written product, usually impressive in performance and rich in functionality. In some cases, though, as mentioned above, the engine is not able to cope up.
+Based on my experience with debugging and fixing the performance issues ( compile time and runtime), following are the areas where usually the bottleneck shows up.
+Upfront, I want to say, if your queries are reasonable in size, and the compilation happens within milliseconds or seconds, then your current code base is fine. In that case you may want to read section on runtime perf.
+But if you queries compilation time are running into hours, may be this fork will be able to solve that issue. In no situation, should query compilation time, for humongous queries, exceed few minutes.
+
+Coming to compile time bottlenecks:
+### Compile time bottlenecks
+
+
+
+
+
+
+
+
+
+
 # Apache Spark
 
 Spark is a unified analytics engine for large-scale data processing. It provides
