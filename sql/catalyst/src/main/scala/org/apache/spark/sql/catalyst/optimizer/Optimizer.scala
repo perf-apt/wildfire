@@ -1537,7 +1537,8 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       val allEqualityMappings = totalEqualityConstraints.map { case EqualTo(l, r) => (l, r) }
       val planOutput = plan.outputSet
       val validConstraintsFilter = (constraints: Iterable[Expression]) => constraints.filter(
-        x => x.references.subsetOf(planOutput) && !plan.constraints.contains(x))
+        x => x.references.nonEmpty && x.references.subsetOf(planOutput) &&
+               !plan.constraints.contains(x))
       val isAttributeContainedInAttributeSet = (expr: Expression, superSet: AttributeSet) =>
         expr.references.subsetOf(superSet)
 
