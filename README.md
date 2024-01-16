@@ -10,7 +10,15 @@ But if you queries compilation time are running into hours, may be this fork wil
 Coming to compile time bottlenecks:
 ### Compile time bottlenecks
 
+1) Running each rule ( of analyzer, and optimizer) sequentially, would result in tree traversal that many times. It is possible to combine some of the rules and execute them together in a single pass, there by minimizing tree traversal.
+2) There are places where the code is recursive. Flattening the recursion helps a lot.
+3) Queries with large number of aliases and having nested/complex case when expressions,  can cause ConstraintPropagation rule to blow up. Stock spark's ConstraintPropagation rule creates constraints pessimistically and is combinatorial in nature. This can result in compilation times getting increased by magnitude.
+4) Using DataFrame APIs to generate a query tree by adding on projects/filters can cause a huge tree, and every subsequent addition of filter/project would result in a repeat analysis of the subtree.
+5) The Optimizer rules run in batches. A Batch would continue to run , till either of the two conditions is met. a) Plan becomes idempotent or 2) Max times to run limit is reached.  Now in a given batch, it is possible that only one rule is changing the plan, but it would cause other rules to still traverse the tree, without them affecting the plan.
+6) The Predicate Pushdown does not push all the filters in a single pass and with each push the filter is re-aliased. This results in plan not reaching idempotency early and because filters are re-aliased from top - to bottom, instead of bottom to Top, the re-aliasing becomes inefficient as the filter keeps getting pushed down. Currently the tree to be substituted is large, while the substitue is small. This impacts the perf as tree to traverse is large. But if the tree to traverse is small, but the to be substituted value is large, the traversal cost is reduced.
 
+### Runtime Perf improvment
+1) 
 
 
 
