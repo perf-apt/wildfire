@@ -155,6 +155,32 @@
           <argLine>-ea -Xmx4g -Xss4m -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs} -Dio.netty.tryReflectionSetAccessible=true</argLine>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>com.coderplus.maven.plugins</groupId>
+        <artifactId>copy-rename-maven-plugin</artifactId>
+        <version>1.0</version>
+        <executions>
+          <execution>
+            <id>copy</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <fileSets>
+                <fileSet>
+                  <sourceFile>src/main/scala-${scala.binary.version}/org/apache/spark/sql/catalyst/expressions/ConstraintSetImplicit.scala</sourceFile>
+                  <destinationFile>src/main/scala/org/apache/spark/sql/catalyst/expressions/ConstraintSetImplicit.scala</destinationFile>
+                </fileSet>
+                <fileSet>
+                  <sourceFile>src/main/scala-${scala.binary.version}/org/apache/spark/sql/catalyst/expressions/ExpressionMap.scala</sourceFile>
+                  <destinationFile>src/main/scala/org/apache/spark/sql/catalyst/expressions/ExpressionMap.scala</destinationFile>
+                </fileSet>
+              </fileSets>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 </project>
