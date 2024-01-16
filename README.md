@@ -1,3 +1,32 @@
+# Wildfire
+## Why another fork?
+Over past 9 years since I dived into apache spark internals, as part of working for SnappyData, WorkDay and presently Cloudera, have come across unsual cases where Query performance have been far from satisfactorily.
+These types of queries have extremely large complex expressions ( like involving case when etc) or very large number of nodes ( like Projects, Filters etc) in a Query Plan . These nodes could run into millions!. Such types of queries usually get generated via some user code, executing in a loop.
+Apache Spark is a brilliantly written product, usually impressive in performance and rich in functionality. In some cases, though, as mentioned above, the engine is not able to cope up.
+Based on my experience with debugging and fixing the performance issues ( compile time and runtime), following are the areas where usually the bottleneck shows up.
+Upfront, I want to say, if your queries are reasonable in size, and the compilation happens within milliseconds or seconds, then your current code base is fine. In that case you may want to read section on runtime perf.
+But if you queries compilation time are running into hours, may be this fork will be able to solve that issue. In no situation, should query compilation time, for humongous queries, exceed few minutes.
+
+Coming to compile time bottlenecks:
+### Compile time bottlenecks
+
+1) Running each rule ( of analyzer, and optimizer) sequentially, would result in tree traversal that many times. It is possible to combine some of the rules and execute them together in a single pass, there by minimizing tree traversal.
+2) There are places where the code is recursive. Flattening the recursion helps a lot.
+3) Queries with large number of aliases and having nested/complex case when expressions,  can cause ConstraintPropagation rule to blow up. Stock spark's ConstraintPropagation rule creates constraints pessimistically and is combinatorial in nature. This can result in compilation times getting increased by magnitude.
+4) Using DataFrame APIs to generate a query tree by adding on projects/filters can cause a huge tree, and every subsequent addition of filter/project would result in a repeat analysis of the subtree.
+5) The Optimizer rules run in batches. A Batch would continue to run , till either of the two conditions is met. a) Plan becomes idempotent or 2) Max times to run limit is reached.  Now in a given batch, it is possible that only one rule is changing the plan, but it would cause other rules to still traverse the tree, without them affecting the plan.
+6) The Predicate Pushdown does not push all the filters in a single pass and with each push the filter is re-aliased. This results in plan not reaching idempotency early and because filters are re-aliased from top - to bottom, instead of bottom to Top, the re-aliasing becomes inefficient as the filter keeps getting pushed down. Currently the tree to be substituted is large, while the substitue is small. This impacts the perf as tree to traverse is large. But if the tree to traverse is small, but the to be substituted value is large, the traversal cost is reduced.
+
+### Runtime Perf improvment
+1) 
+
+
+
+
+
+
+
+
 # Apache Spark
 
 Spark is a unified analytics engine for large-scale data processing. It provides
