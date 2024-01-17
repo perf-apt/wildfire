@@ -7,7 +7,7 @@ Apache Spark is a brilliantly written product, usually impressive in performance
 
 Upfront, I want to say, if your queries are reasonable in size, and the compilation happens within milliseconds or seconds and your runtime performance is satisfactory, then stick with Stock Spark.
 
-But if query compilation times are running into hours or have large nested BroadcastHashJoins on columns which are not **partitioning columns** , may be this fork will be able to solve that issue. In no situation, should query compilation time, for humongous queries, exceed few minutes.
+But if query compilation times are running into hours or have large nested BroadcastHashJoins on columns which are **not partitioning columns** , may be this fork will be able to solve that issue. In no situation, should query compilation time, for humongous queries, exceed few minutes.
 
 Based on my experience with debugging and fixing the performance issues ( compile time and runtime), following are the areas where usually the bottleneck shows up.
 
@@ -22,7 +22,7 @@ Coming to compile time bottlenecks:
 6) The Predicate Pushdown does not push all the filters in a single pass and with each push the filter is re-aliased. This results in plan not reaching idempotency early and because filters are re-aliased from top - to bottom, instead of bottom to Top, the re-aliasing becomes inefficient as the filter keeps getting pushed down. Currently the tree to be substituted is large, while the substitue is small. This impacts the perf as tree to traverse is large. But if the tree to traverse is small, but the to be substituted value is large, the traversal cost is reduced.
 
 ### Runtime Perf improvment
-The existing concept of Dynamic Partition Pruning( DPP ) can be extended to Broadcast Hash Joins involving **non partitioning *comparable* columns **, too. Spark engine already broadcasts the join keys before executing the Broadcast Hash Join. So the keys can be used to filter the rows of the streaming side, at the Scan Level, thereby using it to skip Data Blocks where ever a Min/Max stats is available.
+The existing concept of Dynamic Partition Pruning( DPP ) can be extended to Broadcast Hash Joins involving **non partitioning *comparable* columns**, too. Spark engine already broadcasts the join keys before executing the Broadcast Hash Join. So the keys can be used to filter the rows of the streaming side, at the Scan Level, thereby using it to skip Data Blocks where ever a Min/Max stats is available.
 
 This requires support from the DataSource Implementation too. I am calling it BroadcastVarPushdown
 
