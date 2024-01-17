@@ -1,11 +1,15 @@
 # Wildfire
-## Why another fork?
+## Why another fork from Apache Spark?
 Over past 9 years since I dived into apache spark internals, as part of working for SnappyData, WorkDay and presently Cloudera, have come across unsual cases where Query performance have been far from satisfactorily.
 These types of queries have extremely large complex expressions ( like involving case when etc) or very large number of nodes ( like Projects, Filters etc) in a Query Plan . These nodes could run into millions!. Such types of queries usually get generated via some user code, executing in a loop.
+
 Apache Spark is a brilliantly written product, usually impressive in performance and rich in functionality. In some cases, though, as mentioned above, the engine is not able to cope up.
+
+Upfront, I want to say, if your queries are reasonable in size, and the compilation happens within milliseconds or seconds and your runtime performance is satisfactory, then stick with Stock Spark.
+
+But if query compilation times are running into hours or have large nested BroadcastHashJoins on columns which are not **partitioning columns** , may be this fork will be able to solve that issue. In no situation, should query compilation time, for humongous queries, exceed few minutes.
+
 Based on my experience with debugging and fixing the performance issues ( compile time and runtime), following are the areas where usually the bottleneck shows up.
-Upfront, I want to say, if your queries are reasonable in size, and the compilation happens within milliseconds or seconds, then your current code base is fine. In that case you may want to read section on runtime perf.
-But if you queries compilation time are running into hours, may be this fork will be able to solve that issue. In no situation, should query compilation time, for humongous queries, exceed few minutes.
 
 Coming to compile time bottlenecks:
 ### Compile time bottlenecks
@@ -18,137 +22,20 @@ Coming to compile time bottlenecks:
 6) The Predicate Pushdown does not push all the filters in a single pass and with each push the filter is re-aliased. This results in plan not reaching idempotency early and because filters are re-aliased from top - to bottom, instead of bottom to Top, the re-aliasing becomes inefficient as the filter keeps getting pushed down. Currently the tree to be substituted is large, while the substitue is small. This impacts the perf as tree to traverse is large. But if the tree to traverse is small, but the to be substituted value is large, the traversal cost is reduced.
 
 ### Runtime Perf improvment
-1) 
+The existing concept of Dynamic Partition Pruning( DPP ) can be extended to Broadcast Hash Joins involving **non partitioning *comparable* columns **, too. Spark engine already broadcasts the join keys before executing the Broadcast Hash Join. So the keys can be used to filter the rows of the streaming side, at the Scan Level, thereby using it to skip Data Blocks where ever a Min/Max stats is available.
+
+This requires support from the DataSource Implementation too. I am calling it BroadcastVarPushdown
+
+As of now, I have created the support for BroadcastVarPushdown for Iceberg using parquet format. 
+
+If you want to investigate the perf behaviour on any other V2 DataSource which works along with Spark and code base is available, please reach out to me. I will be more than happy to figure out a workable solution.
 
 
+As of now all the changes in this repo have a corresponding PR opened with upstream Spark, with test coverage. Its difficult to get it upmerged because of multiple reasons, like a) Not being a Committer b) Changes are extensive which rightly raise possibility of destabilizing c) The perf issues affect a niche class of queries and hence risk/reward is not justifiable etc.
 
+If you have any questions, suggestions please do let me know.
 
+For your reference I have put a small test in this Repo, which highlights the compile time issue due to ConstraintsProp rule. I will be adding other comparable tests too
+**org.apache.spark.sql.catalyst.plans.CompareNewAndOldConstraintsSuite**
+You can run this test on this master vs as well as copy and run in stock spark master.
 
-
-
-
-# Apache Spark
-
-Spark is a unified analytics engine for large-scale data processing. It provides
-high-level APIs in Scala, Java, Python, and R, and an optimized engine that
-supports general computation graphs for data analysis. It also supports a
-rich set of higher-level tools including Spark SQL for SQL and DataFrames,
-pandas API on Spark for pandas workloads, MLlib for machine learning, GraphX for graph processing,
-and Structured Streaming for stream processing.
-
-<https://spark.apache.org/>
-
-[![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_main.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_main.yml)
-[![AppVeyor Build](https://img.shields.io/appveyor/ci/ApacheSoftwareFoundation/spark/master.svg?style=plastic&logo=appveyor)](https://ci.appveyor.com/project/ApacheSoftwareFoundation/spark)
-[![PySpark Coverage](https://codecov.io/gh/apache/spark/branch/master/graph/badge.svg)](https://codecov.io/gh/apache/spark)
-[![PyPI Downloads](https://static.pepy.tech/personalized-badge/pyspark?period=month&units=international_system&left_color=black&right_color=orange&left_text=PyPI%20downloads)](https://pypi.org/project/pyspark/)
-
-
-## Online Documentation
-
-You can find the latest Spark documentation, including a programming
-guide, on the [project web page](https://spark.apache.org/documentation.html).
-This README file only contains basic setup instructions.
-
-## Building Spark
-
-Spark is built using [Apache Maven](https://maven.apache.org/).
-To build Spark and its example programs, run:
-
-```bash
-./build/mvn -DskipTests clean package
-```
-
-(You do not need to do this if you downloaded a pre-built package.)
-
-More detailed documentation is available from the project site, at
-["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html).
-
-For general development tips, including info on developing Spark using an IDE, see ["Useful Developer Tools"](https://spark.apache.org/developer-tools.html).
-
-## Interactive Scala Shell
-
-The easiest way to start using Spark is through the Scala shell:
-
-```bash
-./bin/spark-shell
-```
-
-Try the following command, which should return 1,000,000,000:
-
-```scala
-scala> spark.range(1000 * 1000 * 1000).count()
-```
-
-## Interactive Python Shell
-
-Alternatively, if you prefer Python, you can use the Python shell:
-
-```bash
-./bin/pyspark
-```
-
-And run the following command, which should also return 1,000,000,000:
-
-```python
->>> spark.range(1000 * 1000 * 1000).count()
-```
-
-## Example Programs
-
-Spark also comes with several sample programs in the `examples` directory.
-To run one of them, use `./bin/run-example <class> [params]`. For example:
-
-```bash
-./bin/run-example SparkPi
-```
-
-will run the Pi example locally.
-
-You can set the MASTER environment variable when running examples to submit
-examples to a cluster. This can be spark:// URL,
-"yarn" to run on YARN, and "local" to run
-locally with one thread, or "local[N]" to run locally with N threads. You
-can also use an abbreviated class name if the class is in the `examples`
-package. For instance:
-
-```bash
-MASTER=spark://host:7077 ./bin/run-example SparkPi
-```
-
-Many of the example programs print usage help if no params are given.
-
-## Running Tests
-
-Testing first requires [building Spark](#building-spark). Once Spark is built, tests
-can be run using:
-
-```bash
-./dev/run-tests
-```
-
-Please see the guidance on how to
-[run tests for a module, or individual tests](https://spark.apache.org/developer-tools.html#individual-tests).
-
-There is also a Kubernetes integration test, see resource-managers/kubernetes/integration-tests/README.md
-
-## A Note About Hadoop Versions
-
-Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported
-storage systems. Because the protocols have changed in different versions of
-Hadoop, you must build Spark against the same version that your cluster runs.
-
-Please refer to the build documentation at
-["Specifying the Hadoop Version and Enabling YARN"](https://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version-and-enabling-yarn)
-for detailed guidance on building for a particular distribution of Hadoop, including
-building for particular Hive and Hive Thriftserver distributions.
-
-## Configuration
-
-Please refer to the [Configuration Guide](https://spark.apache.org/docs/latest/configuration.html)
-in the online documentation for an overview on how to configure Spark.
-
-## Contributing
-
-Please review the [Contribution to Spark guide](https://spark.apache.org/contributing.html)
-for information on how to get started contributing to the project.
