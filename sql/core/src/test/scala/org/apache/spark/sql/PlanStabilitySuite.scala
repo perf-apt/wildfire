@@ -21,7 +21,6 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable
-import scala.util.Try
 
 import org.apache.commons.io.FileUtils
 
