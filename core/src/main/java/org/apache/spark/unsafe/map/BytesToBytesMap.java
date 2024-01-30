@@ -554,6 +554,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
   }
 
+  public void setToUndefined(Location loc){
+      loc.unset();
+  }
+
+  public Location copyLocation(Location loc){
+    return loc.copyLocation();
+  }
+
   /**
    * Handle returned by {@link BytesToBytesMap#lookup(Object, long, int)} function.
    */
@@ -629,6 +637,32 @@ public final class BytesToBytesMap extends MemoryConsumer {
       valueOffset = offset + uaoSize + keyLength;
       valueLength = length - uaoSize - keyLength;
       return this;
+    }
+
+    private void unset() {
+      this.isDefined = false;
+      this.pos = -1;
+      this.memoryPage = null;
+      this.baseObject = null;
+      this.keyHashcode = 0;
+      this.keyLength = 0;
+      this.keyOffset = 0L;
+      this.valueLength = 0;
+      this.valueOffset = 0L;
+    }
+
+    private Location copyLocation() {
+      Location newLoc = new Location();
+      newLoc.isDefined = this.isDefined;
+      newLoc.pos = this.pos;
+      newLoc.memoryPage = this.memoryPage;
+      newLoc.baseObject = this.baseObject;
+      newLoc.keyHashcode = this.keyHashcode;
+      newLoc.keyLength = this.keyLength;
+      newLoc.keyOffset = this.keyOffset;
+      newLoc.valueLength = this.valueLength;
+      newLoc.valueOffset = this.valueOffset;
+      return newLoc;
     }
 
     /**
