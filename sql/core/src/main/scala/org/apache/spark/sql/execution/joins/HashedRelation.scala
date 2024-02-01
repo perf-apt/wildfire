@@ -121,7 +121,6 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   def close(): Unit
 
   /**
-   * @param reusableLocation
    * @param key
    * @return
    */
@@ -227,12 +226,6 @@ private[joins] class UnsafeHashedRelation(
     private var binaryMap: BytesToBytesMap)
   extends HashedRelation with Externalizable with KryoSerializable {
 
-  @transient
-  private var locationLookUpVar = {
-    val map = this.binaryMap
-    new map.Location
-  }
-
   private[joins] def this() = this(0, 0, null)  // Needed for serialization
 
   override def keyIsUnique: Boolean = binaryMap.numKeys() == binaryMap.numValues()
@@ -251,23 +244,17 @@ private[joins] class UnsafeHashedRelation(
 
   override def get(key: InternalRow): Iterator[InternalRow] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
-    val map = binaryMap // avoid the compiler error
-
-    val loc = this.locationLookUpVar
-    if (!loc.isDefined) {
-      binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
-    }
-
+    val map = binaryMap  // avoid the compiler error
+    val loc = new map.Location  // this could be allocated in stack
+    binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
+      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (loc.isDefined) {
-      val temp = map.copyLocation(loc)
-      map.setToUndefined(loc)
       new Iterator[UnsafeRow] {
         private var _hasNext = true
         override def hasNext: Boolean = _hasNext
         override def next(): UnsafeRow = {
-          resultRow.pointTo(temp.getValueBase, temp.getValueOffset, temp.getValueLength)
-          _hasNext = temp.nextValue()
+          resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
+          _hasNext = loc.nextValue()
           resultRow
         }
       }
@@ -278,16 +265,12 @@ private[joins] class UnsafeHashedRelation(
 
   def getValue(key: InternalRow): InternalRow = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
-    val map = binaryMap // avoid the compiler error
-
-    val loc = this.locationLookUpVar
-    if (!loc.isDefined) {
-      binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
-    }
+    val map = binaryMap  // avoid the compiler error
+    val loc = new map.Location  // this could be allocated in stack
+    binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
+      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (loc.isDefined) {
       resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
-      map.setToUndefined(loc)
       resultRow
     } else {
       null
@@ -297,7 +280,7 @@ private[joins] class UnsafeHashedRelation(
   override def containsKey(key: InternalRow): Boolean = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
     val map = binaryMap // avoid the compiler error
-    val loc = this.locationLookUpVar
+    val loc = new map.Location
     binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset, unsafeKey.getSizeInBytes,
       loc, unsafeKey.hashCode())
     loc.isDefined
@@ -305,23 +288,18 @@ private[joins] class UnsafeHashedRelation(
 
   override def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
-    val map = binaryMap // avoid the compiler error
-
-    val loc = this.locationLookUpVar
-    if (!loc.isDefined) {
-      binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
-    }
+    val map = binaryMap  // avoid the compiler error
+    val loc = new map.Location  // this could be allocated in stack
+    binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
+      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (loc.isDefined) {
-      val temp = map.copyLocation(loc)
-      map.setToUndefined(loc)
-      valueRowWithKeyIndex.withNewKeyIndex(temp.getKeyIndex)
+      valueRowWithKeyIndex.withNewKeyIndex(loc.getKeyIndex)
       new Iterator[ValueRowWithKeyIndex] {
         private var _hasNext = true
         override def hasNext: Boolean = _hasNext
         override def next(): ValueRowWithKeyIndex = {
-          resultRow.pointTo(temp.getValueBase, temp.getValueOffset, temp.getValueLength)
-          _hasNext = temp.nextValue()
+          resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
+          _hasNext = loc.nextValue()
           valueRowWithKeyIndex.withNewValue(resultRow)
         }
       }
@@ -333,17 +311,12 @@ private[joins] class UnsafeHashedRelation(
   override def getValueWithKeyIndex(key: InternalRow): ValueRowWithKeyIndex = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
     val map = binaryMap  // avoid the compiler error
-
-    val loc = this.locationLookUpVar
-    if (!loc.isDefined) {
-      binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
-    }
+    val loc = new map.Location  // this could be allocated in stack
+    binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
+      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (loc.isDefined) {
       resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
       valueRowWithKeyIndex.update(loc.getKeyIndex, resultRow)
-      map.setToUndefined(loc)
-      valueRowWithKeyIndex
     } else {
       null
     }
@@ -397,17 +370,16 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-    write(out.writeInt, out.writeLong, out.writeBoolean, out.write)
+    write(out.writeInt, out.writeLong, out.write)
   }
 
   override def write(kryo: Kryo, out: Output): Unit = Utils.tryOrIOException {
-    write(out.writeInt, out.writeLong, out.writeBoolean, out.write)
+    write(out.writeInt, out.writeLong, out.write)
   }
 
   private def write(
-      writeInt: (Int) => Unit,
-      writeLong: (Long) => Unit,
-      writeBoolean: (Boolean) => Unit,
+      writeInt: Int => Unit,
+      writeLong: Long => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit) : Unit = {
     writeInt(numKeys)
     writeInt(numFields)
@@ -436,13 +408,12 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    read(() => in.readInt(), () => in.readLong(), () => in.readBoolean(), in.readFully)
+    read(() => in.readInt(), () => in.readLong(), in.readFully)
   }
 
   private def read(
       readInt: () => Int,
       readLong: () => Long,
-      readBoolean: () => Boolean,
       readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
     numKeys = readInt()
     numFields = readInt()
@@ -498,7 +469,7 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
-    read(() => in.readInt(), () => in.readLong(), () => in.readBoolean(), in.readBytes)
+    read(() => in.readInt(), () => in.readLong(), in.readBytes)
   }
 }
 
@@ -533,7 +504,8 @@ private[joins] object UnsafeHashedRelation {
       if (!key.anyNull || allowsNullKey) {
         val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
         if (!(ignoresDuplicatedKey && loc.isDefined)) {
-          val success = loc.append(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
+          val success = loc.append(
+            key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
             row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
           if (!success) {
             binaryMap.free()
@@ -679,22 +651,22 @@ private[execution] final class LongToUnsafeRowMap(
     (h ^ (h >> 32)).toInt & mask
   }
 
-  def containsKey(key: Long): Long = {
+  def containsKey(key: Long): Boolean = {
     if (isDense) {
       if (key >= minKey && key <= maxKey) {
         val value = array((key - minKey).toInt)
-        return value
+        return value > 0
       }
     } else {
       var pos = firstSlot(key)
       while (array(pos + 1) != 0) {
         if (array(pos) == key) {
-          return array(pos + 1)
+          return true
         }
         pos = nextSlot(pos)
       }
     }
-    -1L
+    false
   }
 
   /**
@@ -722,30 +694,24 @@ private[execution] final class LongToUnsafeRowMap(
   /**
    * Returns the single UnsafeRow for given key, or null if not found.
    */
-  def getValue(key: Long, resultRow: UnsafeRow, locVar: Long = -1L): UnsafeRow = {
-    if (locVar > 0) {
-      getRow(locVar, resultRow)
-    } else if (locVar == 0) {
-      null
-    } else {
-      if (isDense) {
-        if (key >= minKey && key <= maxKey) {
-          val value = array((key - minKey).toInt)
-          if (value > 0) {
-            return getRow(value, resultRow)
-          }
-        }
-      } else {
-        var pos = firstSlot(key)
-        while (array(pos + 1) != 0) {
-          if (array(pos) == key) {
-            return getRow(array(pos + 1), resultRow)
-          }
-          pos = nextSlot(pos)
+  def getValue(key: Long, resultRow: UnsafeRow): UnsafeRow = {
+    if (isDense) {
+      if (key >= minKey && key <= maxKey) {
+        val value = array((key - minKey).toInt)
+        if (value > 0) {
+          return getRow(value, resultRow)
         }
       }
-      null
+    } else {
+      var pos = firstSlot(key)
+      while (array(pos + 1) != 0) {
+        if (array(pos) == key) {
+          return getRow(array(pos + 1), resultRow)
+        }
+        pos = nextSlot(pos)
+      }
     }
+    null
   }
 
   /**
@@ -768,28 +734,24 @@ private[execution] final class LongToUnsafeRowMap(
   /**
    * Returns an iterator for all the values for the given key, or null if no value found.
    */
-  def get(key: Long, resultRow: UnsafeRow, locVar: Long = -1L): Iterator[UnsafeRow] = {
-    if (locVar > 0) {
-      valueIter(locVar, resultRow)
-    } else {
-      if (isDense) {
-        if (key >= minKey && key <= maxKey) {
-          val value = array((key - minKey).toInt)
-          if (value > 0) {
-            return valueIter(value, resultRow)
-          }
-        }
-      } else {
-        var pos = firstSlot(key)
-        while (array(pos + 1) != 0) {
-          if (array(pos) == key) {
-            return valueIter(array(pos + 1), resultRow)
-          }
-          pos = nextSlot(pos)
+  def get(key: Long, resultRow: UnsafeRow): Iterator[UnsafeRow] = {
+    if (isDense) {
+      if (key >= minKey && key <= maxKey) {
+        val value = array((key - minKey).toInt)
+        if (value > 0) {
+          return valueIter(value, resultRow)
         }
       }
-      null
+    } else {
+      var pos = firstSlot(key)
+      while (array(pos + 1) != 0) {
+        if (array(pos) == key) {
+          return valueIter(array(pos + 1), resultRow)
+        }
+        pos = nextSlot(pos)
+      }
     }
+    null
   }
 
   /**
@@ -1000,8 +962,8 @@ private[execution] final class LongToUnsafeRowMap(
   }
 
   private def write(
-      writeBoolean: (Boolean) => Unit,
-      writeLong: (Long) => Unit,
+      writeBoolean: Boolean => Unit,
+      writeLong: Long => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
     writeBoolean(isDense)
     writeLong(minKey)
@@ -1073,8 +1035,6 @@ class LongHashedRelation(
     private var map: LongToUnsafeRowMap) extends HashedRelation with Externalizable {
 
   private var resultRow: UnsafeRow = new UnsafeRow(nFields)
-  @transient
-  private var locationVar: Long = -1L
 
   // Needed for serialization (it is public to make Java serialization work)
   def this() = this(0, null)
@@ -1099,26 +1059,13 @@ class LongHashedRelation(
     }
   }
 
-  override def get(key: Long): Iterator[InternalRow] = {
-    val retVal = map.get(key, resultRow, this.locationVar)
-    this.locationVar = -1L
-    retVal
-  }
+  override def get(key: Long): Iterator[InternalRow] = map.get(key, resultRow)
 
-
-  override def getValue(key: Long): InternalRow = {
-    val retVal = map.getValue(key, resultRow, this.locationVar)
-    this.locationVar = -1L
-    retVal
-  }
+  override def getValue(key: Long): InternalRow = map.getValue(key, resultRow)
 
   override def keyIsUnique: Boolean = map.keyIsUnique
 
-  override def containsKey(key: Long): Boolean = {
-    val tempLoc = map.containsKey(key)
-    this.locationVar = tempLoc
-    tempLoc > 0
-  }
+  override def containsKey(key: Long): Boolean = map.containsKey(key)
 
   override def containsKey(key: InternalRow): Boolean = {
     if (key.isNullAt(0)) {
