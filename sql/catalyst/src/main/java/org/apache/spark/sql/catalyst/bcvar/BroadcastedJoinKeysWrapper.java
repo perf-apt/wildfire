@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.bcvar;
 
 import java.io.Externalizable;
-
 import java.util.Set;
 import org.apache.spark.sql.types.DataType;
 
@@ -39,6 +38,10 @@ public interface BroadcastedJoinKeysWrapper extends Externalizable {
    void invalidateSelf();
 
    Set<Object> getKeysAsSet();
+
+   boolean hasSameBroadcastIdAndIndexesOfInterest(BroadcastedJoinKeysWrapper that);
+
+   int hashCodeBroadcastIdAndIndexesOfInterest();
 
    // set via system properties
    String CACHED_KEYS_EXPIRY_IN_SECONDS_KEY = "spark.bhj.cachedKeys.expiry";
