@@ -18,18 +18,22 @@
 package org.apache.spark.sql.execution.joins;
 
 import com.google.common.base.Objects;
+import com.google.common.collect.Sets;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.spark.sql.types.DateType;
+import org.apache.spark.sql.types.DateType$;
+import org.apache.spark.sql.types.TimestampType$;
 import org.jetbrains.annotations.NotNull;
 import scala.Function1;
 import scala.collection.Iterator;
@@ -56,9 +60,8 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
 
   private DataType[] totalKeyDataTypes;
 
-  private int relativeKeyIndexInArray = 0;
+  private int index = 0;
 
-  private int[] indexesOfInterest;
 
   private transient volatile WeakReference<Object> keysArray = null;
 
@@ -66,7 +69,9 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
 
   private static final LoadingCache<BroadcastedJoinKeysWrapperImpl, Set<Object>>
     idempotentializerForSet = CacheBuilder.newBuilder().expireAfterWrite(
-     CACHE_EXPIRY, TimeUnit.SECONDS).maximumSize(CACHE_SIZE).weakValues().build(
+     CACHE_EXPIRY, TimeUnit.SECONDS).maximumSize(CACHE_SIZE)
+      // .weakValues()
+      .build(
           new CacheLoader<BroadcastedJoinKeysWrapperImpl, Set<Object>>() {
             public Set<Object> load(BroadcastedJoinKeysWrapperImpl bcjk) {
                 BroadcastJoinKeysReaper.checkInitialized();
@@ -83,7 +88,9 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
   private static final LoadingCache<KeyIdempotForHashedRelationDeser, Object>
       idempotentializerForHashedRelationDeser =
       CacheBuilder.newBuilder().expireAfterWrite(CACHE_EXPIRY, TimeUnit.SECONDS)
-      .maximumSize(CACHE_SIZE).weakValues().build(
+      .maximumSize(CACHE_SIZE)
+          // .weakValues()
+          .build(
           new CacheLoader<KeyIdempotForHashedRelationDeser, Object>() {
             // this will register the Reaper on the driver side as well as executor side to get
             // application life cycle events and removal of broadcast var event
@@ -106,57 +113,59 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
                     return CollectionConverters.SeqHasAsJava(lhr.keys().map(f -> ((Long)f.get(
                         0, LongType$.MODULE$)).byteValue()).toList()).asJava().toArray();
                   }
-                } else {
-                  if (key.bcjk.indexesOfInterest.length == 1) {
-                    return CollectionConverters.SeqHasAsJava(
-                        lhr.keys().map(ir -> {
-                          long hashedKey = ir.getLong(0);
-                          int actualkey;
-                          if (key.bcjk.indexesOfInterest[0] == 0) {
-                            actualkey = (int) (hashedKey >> 32);
-                          } else {
-                            actualkey = (int) (hashedKey & 0xffffffffL);
-                          }
-                          if (key.bcjk.getSingleKeyDataType().equals(IntegerType$.MODULE$)) {
-                            return actualkey;
-                          } else if (key.bcjk.getSingleKeyDataType().equals(ShortType$.MODULE$)) {
-                            return (short)actualkey;
-                          } else {
-                            return (byte)actualkey;
-                          }
-                        }).toList()).asJava().toArray();
-                  } else {
-                    return getObjects(lhr, key.bcjk);
-                  }
+                } else if (key.bcjk.totalJoinKeys == 2) {
+                  DataType key1DataType = key.bcjk.totalKeyDataTypes[0];
+                  DataType key2DataType = key.bcjk.totalKeyDataTypes[1];
+                  Function1<Object, Object> key1ScalaConverter =
+                      CatalystTypeConverters.createToScalaConverter(key1DataType);
+                  Function1<Object, Object> key2ScalaConverter =
+                      CatalystTypeConverters.createToScalaConverter(key2DataType)  ;
+
+                  return CollectionConverters.SeqHasAsJava(
+                      lhr.keys().map(ir -> {
+                        long hashedKey = ir.getLong(0);
+
+                        Object actualkey1 =
+                            key1ScalaConverter.apply(
+                                Integer.valueOf(((int)(hashedKey >> 32))));
+                        Object actualkey2 =
+                            key2ScalaConverter.apply(
+                                Integer.valueOf((int) (hashedKey & 0xffffffffL)));
+
+                        return new Object[]{actualkey1, actualkey2};
+                      }).toList()).asJava().toArray(new Object[0][]);
+                }
+                else {
+                        // getObjects(lhr, key.bcjk);
+                    throw new UnsupportedOperationException("Case not handled");
                 }
               } else {
                 Iterator<InternalRow> keysIter = bcVar.getValue().keys();
-                if (key.bcjk.indexesOfInterest.length == 1) {
-                  int actualIndex = key.bcjk.indexesOfInterest[0];
-                  DataType keyDataType = key.bcjk.totalKeyDataTypes[actualIndex];
+                if (key.bcjk.totalJoinKeys == 1) {
+                  DataType keyDataType = key.bcjk.totalKeyDataTypes[0];
                   Function1<Object, Object> toScalaConverter =
                       CatalystTypeConverters.createToScalaConverter(keyDataType);
                   Iterator<Object> keysAsScala = keysIter.map(f -> {
-                    Object x = f.get(actualIndex, keyDataType);
-                    return toScalaConverter.apply(x);
+                    Object x = f.get(0, keyDataType);
+                    return conversionExcludedDataTypes.contains(keyDataType) ? x :
+                        toScalaConverter.apply(x);
                   });
                   return CollectionConverters.SeqHasAsJava(keysAsScala.toList()).asJava().toArray();
                 } else {
                   Function1<Object, Object>[] toScalaConverters =
-                      new Function1[key.bcjk.indexesOfInterest.length];
-                  for (int i = 0; i < key.bcjk.indexesOfInterest.length; ++i) {
-                    DataType keyDataType =
-                        key.bcjk.totalKeyDataTypes[key.bcjk.indexesOfInterest[i]];
+                      new Function1[key.bcjk.totalJoinKeys];
+                  for (int i = 0; i < key.bcjk.totalJoinKeys; ++i) {
+                    DataType keyDataType = key.bcjk.totalKeyDataTypes[i];
                     toScalaConverters[i] = CatalystTypeConverters.createToScalaConverter(
                         keyDataType);
                   }
                   Iterator<Object[]> keysAsScala = keysIter.map(f -> {
-                    Object[] arr = new Object[key.bcjk.indexesOfInterest.length];
-                    for (int i = 0; i < key.bcjk.indexesOfInterest.length; ++i) {
-                      int actualIndex = key.bcjk.indexesOfInterest[i];
-                      DataType keyDataType = key.bcjk.totalKeyDataTypes[actualIndex];
-                      Object x = f.get(actualIndex, keyDataType);
-                      arr[i] = toScalaConverters[i].apply(x);
+                    Object[] arr = new Object[key.bcjk.totalJoinKeys];
+                    for (int i = 0; i < key.bcjk.totalJoinKeys; ++i) {
+                      DataType keyDataType = key.bcjk.totalKeyDataTypes[i];
+                      Object x = f.get(i, keyDataType);
+                      arr[i] = conversionExcludedDataTypes.contains(keyDataType) ? x :
+                          toScalaConverters[i].apply(x);
                     }
                     return arr;
                   });
@@ -172,9 +181,9 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
     int totalKeysPresent = bcjk.totalJoinKeys;
     final UnsafeRow unsafeRow = new UnsafeRow(totalKeysPresent);
     final ByteBuffer buff = ByteBuffer.allocate(8);
-    Function1<Object, Object>[] toScalaConverters = new Function1[bcjk.indexesOfInterest.length];
-    for (int i = 0; i < bcjk.indexesOfInterest.length; ++i) {
-      DataType keyDataType =bcjk.totalKeyDataTypes[bcjk.indexesOfInterest[i]];
+    Function1<Object, Object>[] toScalaConverters = new Function1[bcjk.totalJoinKeys];
+    for (int i = 0; i < bcjk.totalJoinKeys; ++i) {
+      DataType keyDataType =bcjk.totalKeyDataTypes[i];
       toScalaConverters[i] = CatalystTypeConverters.createToScalaConverter(keyDataType);
     }
     return CollectionConverters.SeqHasAsJava(
@@ -183,11 +192,10 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
         buff.putLong(0, hashedKey);
         byte[] arr = buff.array();
         unsafeRow.pointTo(arr, arr.length);
-        Object[] actualkeys = new Object[bcjk.indexesOfInterest.length];
-        for (int i = 0; i < bcjk.indexesOfInterest.length; ++i) {
-          int actualIndex = bcjk.indexesOfInterest[i];
-          DataType keyDataType = bcjk.totalKeyDataTypes[actualIndex];
-          Object temp = unsafeRow.get(actualIndex, keyDataType);
+        Object[] actualkeys = new Object[bcjk.totalJoinKeys];
+        for (int i = 0; i < bcjk.totalJoinKeys; ++i) {
+          DataType keyDataType = bcjk.totalKeyDataTypes[i];
+          Object temp = unsafeRow.get(i, keyDataType);
           actualkeys[i] =  toScalaConverters[i].apply(temp);
         }
         return actualkeys;
@@ -196,30 +204,29 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
 
   public BroadcastedJoinKeysWrapperImpl() {}
 
-  public BroadcastedJoinKeysWrapperImpl(Broadcast<HashedRelation> bcVar, DataType[] totalKeyDataTypes,
-      int relativeKeyIndexInArray, int[] indexArray, int totalJoinKeys) {
+  public BroadcastedJoinKeysWrapperImpl(
+      Broadcast<HashedRelation> bcVar,
+      DataType[] totalKeyDataTypes,
+      int index, int totalJoinKeys) {
     this.bcVar = bcVar;
     this.totalKeyDataTypes = totalKeyDataTypes;
-    this.relativeKeyIndexInArray = relativeKeyIndexInArray;
-    this.indexesOfInterest = indexArray;
+    this.index = index;
     this.totalJoinKeys = totalJoinKeys;
   }
 
   @Override
   public void writeExternal(ObjectOutput out) throws IOException {
     out.writeObject(this.bcVar);
-    out.writeInt(this.relativeKeyIndexInArray);
+    out.writeInt(this.index);
     out.writeInt(this.totalJoinKeys);
-    out.writeObject(this.indexesOfInterest);
     out.writeObject(this.totalKeyDataTypes);
   }
 
   @Override
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
     this.bcVar = (Broadcast<HashedRelation>) in.readObject();
-    this.relativeKeyIndexInArray = in.readInt();
+    this.index = in.readInt();
     this.totalJoinKeys = in.readInt();
-    this.indexesOfInterest = (int[])in.readObject();
     this.totalKeyDataTypes = (DataType[])in.readObject();
   }
 
@@ -239,24 +246,13 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
   }
 
   public DataType getSingleKeyDataType() {
-    return this.totalKeyDataTypes[indexesOfInterest[this.relativeKeyIndexInArray]];
+    return this.totalKeyDataTypes[index];
   }
 
-  public boolean hasSameBroadcastIdAndIndexesOfInterest(BroadcastedJoinKeysWrapper that) {
-    return that instanceof  BroadcastedJoinKeysWrapperImpl &&
-        this.getBroadcastVarId() == ((BroadcastedJoinKeysWrapperImpl)that).bcVar.id() &&
-        Arrays.equals(this.indexesOfInterest,
-            ((BroadcastedJoinKeysWrapperImpl)that).indexesOfInterest);
-  }
-
-  public int hashCodeBroadcastIdAndIndexesOfInterest() {
-    return Objects.hashCode(this.bcVar.id(),this.indexesOfInterest);
-  }
 
   public ArrayWrapper<? extends Object> getKeysArray() {
     Object array = this.initKeys();
-    return ArrayWrapper.wrapArray(array, this.indexesOfInterest.length == 1,
-        this.relativeKeyIndexInArray);
+    return ArrayWrapper.wrapArray(array, this.totalJoinKeys == 1,  this.index);
   }
 
   public Set<Object> getKeysAsSet() {
@@ -277,10 +273,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
     if (other != null) {
       return this == other || (other instanceof BroadcastedJoinKeysWrapperImpl
           && this.bcVar.id() == ((BroadcastedJoinKeysWrapperImpl) other).bcVar.id()
-          && this.relativeKeyIndexInArray ==
-          ((BroadcastedJoinKeysWrapperImpl) other).relativeKeyIndexInArray
-          && Arrays.equals(this.indexesOfInterest,
-          ((BroadcastedJoinKeysWrapperImpl) other).indexesOfInterest));
+          && this.index == ((BroadcastedJoinKeysWrapperImpl) other).index);
     } else {
       return false;
     }
@@ -288,20 +281,17 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(this.bcVar.id(), this.relativeKeyIndexInArray, this.indexesOfInterest);
+    return Objects.hashCode(this.bcVar.id(), this.index);
   }
 
   public long getBroadcastVarId() {
     return this.bcVar.id();
   }
 
-  public int getRelativeKeyIndex() {
-    return this.relativeKeyIndexInArray;
+  public int getKeyIndex() {
+    return this.index;
   }
 
-  public int getTupleLength() {
-    return this.indexesOfInterest.length;
-  }
 
   public int getTotalJoinKeys() {
     return this.totalJoinKeys;
@@ -430,8 +420,8 @@ class KeyIdempotForHashedRelationDeser {
     if (other != null) {
       return this == other ||
           (other instanceof KeyIdempotForHashedRelationDeser &&
-              this.bcjk.hasSameBroadcastIdAndIndexesOfInterest(
-          ((KeyIdempotForHashedRelationDeser) other).bcjk));
+              this.bcjk.getBroadcastVarId() ==
+          ((KeyIdempotForHashedRelationDeser) other).bcjk.getBroadcastVarId());
     } else {
       return false;
     }
@@ -439,6 +429,6 @@ class KeyIdempotForHashedRelationDeser {
 
   @Override
   public int hashCode() {
-    return bcjk.hashCodeBroadcastIdAndIndexesOfInterest();
+    return Objects.hashCode(this.bcjk.getBroadcastVarId());
   }
 }

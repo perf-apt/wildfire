@@ -74,33 +74,16 @@ object BroadcastHashJoinUtil {
       bcRelation: Broadcast[HashedRelation],
       buildKeysCanonicalized: Seq[Expression],
       pushDownData: Seq[BroadcastVarPushDownData]): Unit = {
-    val actualIndexToRelativeIndex = mutable.Map[Integer, Integer]()
-    var currentRelativeIndex = 0
-    pushDownData.foreach { bcData =>
-      if (!actualIndexToRelativeIndex.contains(bcData.joinKeyIndexInJoiningKeys)) {
-        actualIndexToRelativeIndex += Integer.valueOf(bcData.joinKeyIndexInJoiningKeys) ->
-          Integer.valueOf(currentRelativeIndex)
-        currentRelativeIndex += 1
-      }
-    }
     val totalJoinKeys = buildKeysCanonicalized.size
-    val indexesOfInterestArray = Array.ofDim[Int](actualIndexToRelativeIndex.size)
     val dataTypesArray = buildKeysCanonicalized.map(_.dataType).toArray
-    actualIndexToRelativeIndex.foreach {
-      case (actualIndex, relativeIndex) => indexesOfInterestArray(relativeIndex) = actualIndex
-    }
-
     pushDownData.foreach { bcData =>
-      val relativeIndex = actualIndexToRelativeIndex.getOrElse(bcData.joinKeyIndexInJoiningKeys,
-        throw new IllegalStateException("missing actual index key from map"))
       val streamJoinLeafColName = getColNameFromUnderlyingScan(
         bcData.targetBatchScanExec.scan.asInstanceOf[SupportsRuntimeV2Filtering],
         bcData.streamsideLeafJoinAttribIndex)
       val actualData = new BroadcastedJoinKeysWrapperImpl(
         bcRelation,
         dataTypesArray,
-        relativeIndex,
-        indexesOfInterestArray,
+        bcData.joinKeyIndexInJoiningKeys,
         totalJoinKeys)
       val dt = ObjectType(classOf[BroadcastedJoinKeysWrapperImpl])
       val embedAsLiteral = Literal.create(actualData, dt)
@@ -314,9 +297,9 @@ object BroadcastHashJoinUtil {
 
        // case _: BaseAggregateExec => isBuildPlanPrunable = true
 
-        case j: BaseJoinExec if j.joinType == LeftSemi || j.joinType == Inner =>
+      /*  case j: BaseJoinExec if j.joinType == LeftSemi || j.joinType == Inner =>
           isBuildPlanPrunable = true
-
+      */
         case ree: ReusedExchangeExec => plansToCheck.prepend(ree.child)
 
         case x: QueryStageExec => plansToCheck.prepend(x.plan)
