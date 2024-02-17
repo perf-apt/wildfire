@@ -282,6 +282,8 @@ object BroadcastHashJoinUtil {
       buildPlan: SparkPlan,
       batchScansSelectedForBCPush: java.util.IdentityHashMap[BatchScanExec, _]): Boolean = {
     val plansToCheck = mutable.ListBuffer[SparkPlan](buildPlan)
+    val considerPushedBCVarAsPrunability =
+      buildPlan.conf.considerPushedBroadcastvarOnBatchscanAsPrunablity
     var isBuildPlanPrunable = false
     while (plansToCheck.nonEmpty && !isBuildPlanPrunable) {
       val planToCheck = plansToCheck.remove(0)
@@ -292,7 +294,7 @@ object BroadcastHashJoinUtil {
         case bs: BatchScanExec
             if bs.proxyForPushedBroadcastVar.isDefined ||
               (batchScansSelectedForBCPush.ne(null) && batchScansSelectedForBCPush.containsKey(
-                bs)) =>
+                bs)) && considerPushedBCVarAsPrunability =>
           isBuildPlanPrunable = true
 
        // case _: BaseAggregateExec => isBuildPlanPrunable = true

@@ -17,28 +17,26 @@
 
 package org.apache.spark.sql.execution.joins;
 
-import com.google.common.base.Objects;
-import com.google.common.collect.Sets;
+
+
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.spark.sql.types.DateType;
-import org.apache.spark.sql.types.DateType$;
-import org.apache.spark.sql.types.TimestampType$;
-import org.jetbrains.annotations.NotNull;
 import scala.Function1;
 import scala.collection.Iterator;
 import scala.jdk.CollectionConverters;
 
+import org.jetbrains.annotations.NotNull;
+
+import com.google.common.base.Objects;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -70,111 +68,114 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
   private static final LoadingCache<BroadcastedJoinKeysWrapperImpl, Set<Object>>
     idempotentializerForSet = CacheBuilder.newBuilder().expireAfterWrite(
      CACHE_EXPIRY, TimeUnit.SECONDS).maximumSize(CACHE_SIZE)
-      // .weakValues()
+      .weakValues()
       .build(
-          new CacheLoader<BroadcastedJoinKeysWrapperImpl, Set<Object>>() {
+          new CacheLoader<>() {
             public Set<Object> load(BroadcastedJoinKeysWrapperImpl bcjk) {
-                BroadcastJoinKeysReaper.checkInitialized();
-                ArrayWrapper<? extends Object> keys = bcjk.getKeysArray();
-                int len = keys.getLength();
-                Set<Object> set = new HashSet<>();
-                for(int i = 0; i < len; ++i) {
-                  set.add(keys.get(i));
-                }
-                return set;
+              BroadcastJoinKeysReaper.checkInitialized();
+              ArrayWrapper<? extends Object> keys = bcjk.getKeysArray();
+              int len = keys.getLength();
+              Set<Object> set = new HashSet<>();
+              for (int i = 0; i < len; ++i) {
+                set.add(keys.get(i));
               }
-            });
+              return set;
+            }
+          });
 
   private static final LoadingCache<KeyIdempotForHashedRelationDeser, Object>
       idempotentializerForHashedRelationDeser =
       CacheBuilder.newBuilder().expireAfterWrite(CACHE_EXPIRY, TimeUnit.SECONDS)
       .maximumSize(CACHE_SIZE)
-          // .weakValues()
+          .weakValues()
           .build(
-          new CacheLoader<KeyIdempotForHashedRelationDeser, Object>() {
-            // this will register the Reaper on the driver side as well as executor side to get
-            // application life cycle events and removal of broadcast var event
-            public Object load(KeyIdempotForHashedRelationDeser key){
-              BroadcastJoinKeysReaper.checkInitialized();
-              Broadcast<HashedRelation> bcVar = key.bcjk.bcVar;
-              if (bcVar.getValue() instanceof LongHashedRelation) {
-                LongHashedRelation lhr = (LongHashedRelation) bcVar.getValue();
-                if (key.bcjk.totalJoinKeys == 1) {
-                  if (key.bcjk.totalKeyDataTypes[0].equals(LongType$.MODULE$)) {
-                    return CollectionConverters.SeqHasAsJava(lhr.keys().map(f -> f.get(
-                        0, LongType$.MODULE$)).toList()).asJava().toArray();
-                  } else if (key.bcjk.totalKeyDataTypes[0].equals(IntegerType$.MODULE$)) {
-                    return CollectionConverters.SeqHasAsJava(lhr.keys().map(f -> ((Long)f.get(
-                        0, LongType$.MODULE$)).intValue()).toList()).asJava().toArray();
-                  } else if (key.bcjk.totalKeyDataTypes[0].equals(ShortType$.MODULE$)) {
-                    return CollectionConverters.SeqHasAsJava(lhr.keys().map(f -> ((Long)f.get(
-                        0, LongType$.MODULE$)).shortValue()).toList()).asJava().toArray();
-                  } else {
-                    return CollectionConverters.SeqHasAsJava(lhr.keys().map(f -> ((Long)f.get(
-                        0, LongType$.MODULE$)).byteValue()).toList()).asJava().toArray();
-                  }
-                } else if (key.bcjk.totalJoinKeys == 2) {
-                  DataType key1DataType = key.bcjk.totalKeyDataTypes[0];
-                  DataType key2DataType = key.bcjk.totalKeyDataTypes[1];
-                  Function1<Object, Object> key1ScalaConverter =
-                      CatalystTypeConverters.createToScalaConverter(key1DataType);
-                  Function1<Object, Object> key2ScalaConverter =
-                      CatalystTypeConverters.createToScalaConverter(key2DataType)  ;
+              new CacheLoader<>() {
+                // this will register the Reaper on the driver side as well as executor side to get
+                // application life cycle events and removal of broadcast var event
+                public Object load(KeyIdempotForHashedRelationDeser key) {
+                  BroadcastJoinKeysReaper.checkInitialized();
+                  Broadcast<HashedRelation> bcVar = key.bcjk.bcVar;
+                  if (bcVar.getValue() instanceof LongHashedRelation) {
+                    LongHashedRelation lhr = (LongHashedRelation) bcVar.getValue();
+                    if (key.bcjk.totalJoinKeys == 1) {
+                      if (key.bcjk.totalKeyDataTypes[0].equals(LongType$.MODULE$)) {
+                        return CollectionConverters.SeqHasAsJava(lhr.keys().map(f -> f.get(
+                            0, LongType$.MODULE$)).toList()).asJava().toArray();
+                      } else if (key.bcjk.totalKeyDataTypes[0].equals(IntegerType$.MODULE$)) {
+                        return CollectionConverters.SeqHasAsJava(lhr.keys().map(f -> ((Long) f.get(
+                            0, LongType$.MODULE$)).intValue()).toList()).asJava().toArray();
+                      } else if (key.bcjk.totalKeyDataTypes[0].equals(ShortType$.MODULE$)) {
+                        return CollectionConverters.SeqHasAsJava(lhr.keys().map(f -> ((Long) f.get(
+                            0, LongType$.MODULE$)).shortValue()).toList()).asJava().toArray();
+                      } else {
+                        return CollectionConverters.SeqHasAsJava(lhr.keys().map(f -> ((Long) f.get(
+                            0, LongType$.MODULE$)).byteValue()).toList()).asJava().toArray();
+                      }
+                    } else if (key.bcjk.totalJoinKeys == 2) {
+                      DataType key1DataType = key.bcjk.totalKeyDataTypes[0];
+                      DataType key2DataType = key.bcjk.totalKeyDataTypes[1];
+                      Function1<Object, Object> key1ScalaConverter =
+                          CatalystTypeConverters.createToScalaConverter(key1DataType);
+                      Function1<Object, Object> key2ScalaConverter =
+                          CatalystTypeConverters.createToScalaConverter(key2DataType);
 
-                  return CollectionConverters.SeqHasAsJava(
-                      lhr.keys().map(ir -> {
-                        long hashedKey = ir.getLong(0);
+                      return CollectionConverters.SeqHasAsJava(
+                          lhr.keys().map(ir -> {
+                            long hashedKey = ir.getLong(0);
 
-                        Object actualkey1 =
-                            key1ScalaConverter.apply(
-                                Integer.valueOf(((int)(hashedKey >> 32))));
-                        Object actualkey2 =
-                            key2ScalaConverter.apply(
-                                Integer.valueOf((int) (hashedKey & 0xffffffffL)));
+                            Object actualkey1 =
+                                key1ScalaConverter.apply(
+                                    Integer.valueOf(((int) (hashedKey >> 32))));
+                            Object actualkey2 =
+                                key2ScalaConverter.apply(
+                                    Integer.valueOf((int) (hashedKey & 0xffffffffL)));
 
-                        return new Object[]{actualkey1, actualkey2};
-                      }).toList()).asJava().toArray(new Object[0][]);
-                }
-                else {
-                        // getObjects(lhr, key.bcjk);
-                    throw new UnsupportedOperationException("Case not handled");
-                }
-              } else {
-                Iterator<InternalRow> keysIter = bcVar.getValue().keys();
-                if (key.bcjk.totalJoinKeys == 1) {
-                  DataType keyDataType = key.bcjk.totalKeyDataTypes[0];
-                  Function1<Object, Object> toScalaConverter =
-                      CatalystTypeConverters.createToScalaConverter(keyDataType);
-                  Iterator<Object> keysAsScala = keysIter.map(f -> {
-                    Object x = f.get(0, keyDataType);
-                    return conversionExcludedDataTypes.contains(keyDataType) ? x :
-                        toScalaConverter.apply(x);
-                  });
-                  return CollectionConverters.SeqHasAsJava(keysAsScala.toList()).asJava().toArray();
-                } else {
-                  Function1<Object, Object>[] toScalaConverters =
-                      new Function1[key.bcjk.totalJoinKeys];
-                  for (int i = 0; i < key.bcjk.totalJoinKeys; ++i) {
-                    DataType keyDataType = key.bcjk.totalKeyDataTypes[i];
-                    toScalaConverters[i] = CatalystTypeConverters.createToScalaConverter(
-                        keyDataType);
-                  }
-                  Iterator<Object[]> keysAsScala = keysIter.map(f -> {
-                    Object[] arr = new Object[key.bcjk.totalJoinKeys];
-                    for (int i = 0; i < key.bcjk.totalJoinKeys; ++i) {
-                      DataType keyDataType = key.bcjk.totalKeyDataTypes[i];
-                      Object x = f.get(i, keyDataType);
-                      arr[i] = conversionExcludedDataTypes.contains(keyDataType) ? x :
-                          toScalaConverters[i].apply(x);
+                            return new Object[] {actualkey1, actualkey2};
+                          }).toList()).asJava().toArray(new Object[0][]);
+                    } else {
+                      // getObjects(lhr, key.bcjk);
+                      throw new UnsupportedOperationException("Case not handled");
                     }
-                    return arr;
-                  });
-                  return CollectionConverters.SeqHasAsJava(keysAsScala.toList()).asJava().toArray(
-                      new Object[0][]);
+                  } else {
+                    Iterator<InternalRow> keysIter = bcVar.getValue().keys();
+                    if (key.bcjk.totalJoinKeys == 1) {
+                      DataType keyDataType = key.bcjk.totalKeyDataTypes[0];
+                      Function1<Object, Object> toScalaConverter =
+                          CatalystTypeConverters.createToScalaConverter(keyDataType);
+                      Iterator<Object> keysAsScala = keysIter.map(f -> {
+                        Object x = f.get(0, keyDataType);
+                        return conversionExcludedDataTypes.contains(keyDataType) ? x :
+                            toScalaConverter.apply(x);
+                      });
+                      return CollectionConverters.SeqHasAsJava(keysAsScala.toList())
+                          .asJava()
+                          .toArray();
+                    } else {
+                      Function1<Object, Object>[] toScalaConverters =
+                          new Function1[key.bcjk.totalJoinKeys];
+                      for (int i = 0; i < key.bcjk.totalJoinKeys; ++i) {
+                        DataType keyDataType = key.bcjk.totalKeyDataTypes[i];
+                        toScalaConverters[i] = CatalystTypeConverters.createToScalaConverter(
+                            keyDataType);
+                      }
+                      Iterator<Object[]> keysAsScala = keysIter.map(f -> {
+                        Object[] arr = new Object[key.bcjk.totalJoinKeys];
+                        for (int i = 0; i < key.bcjk.totalJoinKeys; ++i) {
+                          DataType keyDataType = key.bcjk.totalKeyDataTypes[i];
+                          Object x = f.get(i, keyDataType);
+                          arr[i] = conversionExcludedDataTypes.contains(keyDataType) ? x :
+                              toScalaConverters[i].apply(x);
+                        }
+                        return arr;
+                      });
+                      return CollectionConverters.SeqHasAsJava(keysAsScala.toList())
+                          .asJava()
+                          .toArray(
+                              new Object[0][]);
+                    }
+                  }
                 }
-              }
-            }
-          });
+              });
 
   private static Object[][] getObjects(LongHashedRelation lhr,
       BroadcastedJoinKeysWrapperImpl bcjk ) {
