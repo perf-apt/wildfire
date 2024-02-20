@@ -232,41 +232,40 @@ object BroadcastHashJoinUtil {
             val streamsideJoinColName = getColNameFromUnderlyingScan(
               underlyingRuntimeFilteringScan,
               streamsideLeafJoinAttribIndex)
-            if (runtimeFilteringBatchScan.runtimeFilters.isEmpty) {
-              Seq(
-                BroadcastVarPushDownData(
-                  streamsideLeafJoinAttribIndex,
-                  runtimeFilteringBatchScan,
-                  buildJoinKeys(joinKeyIndex).dataType,
-                  joinKeyIndex))
-            } else if (conf.preferBroadcastVarPushdownOverDPP) {
-              // TODO: Asif :because of bug in spark where if a union node contains two tables,
-              // one partitioned and another non partitioned, spark assumes both are partitioned
-              // and pushes run time filter (dynamic expression) on both.
-              // so we need to tackle this here.
-              val partitionCols = underlyingRuntimeFilteringScan
-                .partitionAttributes()
-                .map(convertNameReferencesToString)
-              // we are here means runtime filters added to batchscanexec is non empty
-              val removeDpp = partitionCols.contains(streamsideJoinColName) ||
-                partitionCols.isEmpty
-              Seq(
-                BroadcastVarPushDownData(
-                  streamsideLeafJoinAttribIndex,
-                  runtimeFilteringBatchScan,
-                  buildJoinKeys(joinKeyIndex).dataType,
-                  joinKeyIndex,
-                  removeDpp))
-            } else if (!underlyingRuntimeFilteringScan
-                .partitionAttributes()
-                .map(convertNameReferencesToString)
-                .contains(streamsideJoinColName)) {
-              Seq(
-                BroadcastVarPushDownData(
-                  streamsideLeafJoinAttribIndex,
-                  runtimeFilteringBatchScan,
-                  buildJoinKeys(joinKeyIndex).dataType,
-                  joinKeyIndex))
+            val partitionCols = underlyingRuntimeFilteringScan.partitionAttributes().
+              map(convertNameReferencesToString).toSet
+            if (!partitionCols.contains(streamsideJoinColName)) {
+              if (runtimeFilteringBatchScan.runtimeFilters.isEmpty) {
+                Seq(
+                  BroadcastVarPushDownData(
+                    streamsideLeafJoinAttribIndex,
+                    runtimeFilteringBatchScan,
+                    buildJoinKeys(joinKeyIndex).dataType,
+                    joinKeyIndex))
+              } else if (conf.preferBroadcastVarPushdownOverDPP) {
+                // TODO: Asif :because of bug in spark where if a union node contains two tables,
+                // one partitioned and another non partitioned, spark assumes both are partitioned
+                // and pushes run time filter (dynamic expression) on both.
+                // so we need to tackle this here.
+
+                // we are here means runtime filters added to batchscanexec is non empty
+                val removeDpp = partitionCols.contains(streamsideJoinColName) ||
+                  partitionCols.isEmpty
+                Seq(
+                  BroadcastVarPushDownData(
+                    streamsideLeafJoinAttribIndex,
+                    runtimeFilteringBatchScan,
+                    buildJoinKeys(joinKeyIndex).dataType,
+                    joinKeyIndex,
+                    removeDpp))
+              } else {
+                Seq(
+                  BroadcastVarPushDownData(
+                    streamsideLeafJoinAttribIndex,
+                    runtimeFilteringBatchScan,
+                    buildJoinKeys(joinKeyIndex).dataType,
+                    joinKeyIndex))
+              }
             } else {
               Seq.empty
             }
