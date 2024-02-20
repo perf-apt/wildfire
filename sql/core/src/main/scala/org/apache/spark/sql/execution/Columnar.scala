@@ -137,12 +137,7 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
       if (pushedBroadcastFiltersTemp.isEmpty) {
         checkForWarning(batchScanOpt)
       }
-      val filterToDelegate: Option[FilterExec] = this.parent match {
-        case x: FilterExec => Option(x)
-        // Because this makes the stats count of original filterexec 0,
-        // disabling it for now .Option(x)
-        case _ => None
-      }
+
       // Do not evaluate filter for the bottom most broadcast hash join as if
       // the tuple is filtered to be selected, then it would unnecessary be again have to be
       // evaluated.
@@ -211,10 +206,8 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
               this.commonSingleFieldUnsafeRowWriterVar)
           }
           .reduce[Expression](And(_, _))
-        val (filterPlan, parentToUse) = filterToDelegate.map(f =>
-          new CustomFilterExec(And(f.condition, newFilterExpr), ColumnarToRowExec.this,
-            f.metrics) -> f.parent).getOrElse(
-          FilterExec(newFilterExpr, ColumnarToRowExec.this) -> this.parent)
+        val (filterPlan, parentToUse) =
+          FilterExec(newFilterExpr, ColumnarToRowExec.this) -> this.parent
         filterPlan.produce(ctx, parentToUse)
       }
     } else {
@@ -751,9 +744,4 @@ case class ApplyColumnarRulesAndInsertTransitions(
     columnarRules.reverse.foreach(r => postInsertPlan = r.postColumnarTransitions(postInsertPlan))
     postInsertPlan
   }
-}
-
-class CustomFilterExec(condition: Expression, child: SparkPlan,
-    metricsSupplier: => Map[String, SQLMetric]) extends FilterExec(condition, child) {
-  override lazy val metrics = metricsSupplier
 }
