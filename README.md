@@ -7,7 +7,13 @@ Apache Spark is a brilliantly written product, usually impressive in performance
 
 Upfront, I want to say, if your queries are reasonable in size, and the compilation happens within milliseconds or seconds and your runtime performance is satisfactory, then stick with Stock Spark.
 
+
 But if query compilation times are running into hours or have large nested BroadcastHashJoins on columns which are **not partitioning columns** , may be this fork will be able to solve that issue. In no situation, should query compilation time, for humongous queries, exceed few minutes.
+
+[![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_main.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_main.yml)
+[![PySpark Coverage](https://codecov.io/gh/apache/spark/branch/master/graph/badge.svg)](https://codecov.io/gh/apache/spark)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/pyspark?period=month&units=international_system&left_color=black&right_color=orange&left_text=PyPI%20downloads)](https://pypi.org/project/pyspark/)
+
 
 Based on my experience with debugging and fixing the performance issues ( compile time and runtime), following are the areas where usually the bottleneck shows up.
 
