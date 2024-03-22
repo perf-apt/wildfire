@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.adaptive.OrphanBSCollect.OrphanBSCollect
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastHashJoinUtil, BroadcastVarPushDownData, HashedRelation, JoiningKeyData, ProxyBroadcastVarAndStageIdentifier, SELF_PUSH}
@@ -93,7 +93,7 @@ case class AdaptiveSparkPlanExec(
 
   // The logical plan optimizer for re-optimizing the current logical plan.
   @transient private val optimizer = new AQEOptimizer(conf,
-    session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
+    context.session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
 
   // `EnsureRequirements` may remove user-specified repartition and assume the query plan won't
   // change its output partitioning. This assumption is not true in AQE. Here we check the
@@ -109,7 +109,8 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val costEvaluator =
     conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
-      case Some(className) => CostEvaluator.instantiate(className, session.sparkContext.getConf)
+      case Some(className) =>
+        CostEvaluator.instantiate(className, context.session.sparkContext.getConf)
       case _ => SimpleCostEvaluator(conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN))
     }
 
@@ -261,7 +262,7 @@ case class AdaptiveSparkPlanExec(
     //    and display SQL metrics correctly.
     // 2. If the `QueryExecution` does not match the current execution ID, it means the execution
     //    ID belongs to another (parent) query, and we should not call update UI in this query.
-    //    e.g., a nested `AdaptiveSparkPlanExec` in `InMemoryTableScanExec`.
+    //    e.g., a nested `AdaptiveSparkPlanExec` in `InMemoryTableScanLike`.
     //
     // That means only the root `AdaptiveSparkPlanExec` of the main query that triggers this
     // query execution need to do a plan update for the UI.
@@ -583,7 +584,7 @@ case class AdaptiveSparkPlanExec(
     val nextMsg = events.take()
     val rem = new util.ArrayList[StageMaterializationEvent]()
     events.drainTo(rem)
-    val stagedIdsBatchProcessed = (for (message <- (Seq(nextMsg) ++ rem.asScala)) yield {
+    val stagedIdsBatchProcessed = (for (message <- Seq(nextMsg) ++ rem.asScala) yield {
       val stage = message match {
         case StageSuccess(stage, res) =>
           stage.resultOption.set(Some(res))
@@ -970,9 +971,9 @@ case class AdaptiveSparkPlanExec(
         newStages = Seq.empty,
         orphanBatchScansWithProxyVar = orphans)
 
-    case i: InMemoryTableScanExec =>
-      // There is no reuse for `InMemoryTableScanExec`, which is different from `Exchange`. If we
-      // hit it the first time, we should always create a new query stage.
+    case i: InMemoryTableScanLike =>
+      // There is no reuse for `InMemoryTableScanLike`, which is different from `Exchange`.
+      // If we hit it the first time, we should always create a new query stage.
       val newStage = newQueryStage(i)
       CreateStageResult(
         newPlan = newStage,
@@ -1038,12 +1039,12 @@ case class AdaptiveSparkPlanExec(
           BroadcastQueryStageExec(currentStageId, newPlan, e.canonicalized,
             hasStreamSidePushdownDependent = hasStreamSidePushdownDependent)
         }
-      case i: InMemoryTableScanExec =>
+      case i: InMemoryTableScanLike =>
         // Apply `queryStageOptimizerRules` so that we can reuse subquery.
-        // No need to apply `postStageCreationRules` for `InMemoryTableScanExec`
+        // No need to apply `postStageCreationRules` for `InMemoryTableScanLike`
         // as it's a leaf node.
         val newPlan = optimizeQueryStage(i, isFinalStage = false)
-        if (!newPlan.isInstanceOf[InMemoryTableScanExec]) {
+        if (!newPlan.isInstanceOf[InMemoryTableScanLike]) {
           throw SparkException.internalError(
             "Custom AQE rules cannot transform table scan node to something else.")
         }

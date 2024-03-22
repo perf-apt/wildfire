@@ -14,34 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.pandas.tests.groupby.test_split_apply import GroupbySplitApplyTestingFuncMixin
+from pyspark.sql.tests.test_creation import DataFrameCreationTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class GroupbySplitApplyBasicMixin(GroupbySplitApplyTestingFuncMixin):
-    def test_split_apply_combine_on_series(self):
-        funcs = [
-            ((True, False), ["count", "first", "last"]),
-        ]
-        self._test_split_apply_func(funcs)
-
-
-class GroupbySplitApplyBasicTests(
-    GroupbySplitApplyBasicMixin,
-    PandasOnSparkTestCase,
-    SQLTestUtils,
+class DataFrameCreationParityTests(
+    DataFrameCreationTestsMixin,
+    ReusedConnectTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.groupby.test_split_apply_basic import *  # noqa: F401
+    import unittest
+    from pyspark.sql.tests.connect.test_parity_creation import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

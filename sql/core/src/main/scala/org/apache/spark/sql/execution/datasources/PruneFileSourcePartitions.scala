@@ -70,10 +70,11 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         _,
         _,
         _))
-        if fsRelation.partitionSchema.nonEmpty =>
+        // TODO: Asif : should we keep the check of filters.nonEmpty?
+        if filters.nonEmpty && fsRelation.partitionSchema.nonEmpty =>
         val normalizedFilters = DataSourceStrategy.normalizeExprs(
-          filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)),
-          logicalRelation.output)
+          filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)
+            && DataSourceUtils.shouldPushFilter(f)), logicalRelation.output)
         val (partitionKeyFilters, _) = DataSourceUtils
           .getPartitionFiltersAndDataFilters(partitionSchema, normalizedFilters)
         var cfiInserted = false
