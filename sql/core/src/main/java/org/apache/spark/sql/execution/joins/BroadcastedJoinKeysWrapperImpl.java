@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.joins;
 
-
-
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
@@ -328,7 +326,7 @@ public class BroadcastedJoinKeysWrapperImpl implements BroadcastedJoinKeysWrappe
 
 class SetWrapper<T> implements Set<T> {
   private final Set<T> base;
-  public SetWrapper(Set<T> base) {
+  SetWrapper(Set<T> base) {
     this.base = base;
   }
   @Override
@@ -412,7 +410,7 @@ class SetWrapper<T> implements Set<T> {
 class KeyIdempotForHashedRelationDeser {
   final BroadcastedJoinKeysWrapperImpl bcjk;
 
-  public KeyIdempotForHashedRelationDeser(BroadcastedJoinKeysWrapperImpl bcjk) {
+  KeyIdempotForHashedRelationDeser(BroadcastedJoinKeysWrapperImpl bcjk) {
     this.bcjk = bcjk;
   }
 
