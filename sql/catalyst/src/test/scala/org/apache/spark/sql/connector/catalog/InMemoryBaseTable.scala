@@ -572,6 +572,9 @@ abstract class InMemoryBaseTable(
     }
 
     override def getPushedBroadcastFiltersCount(): Int = this.getPushedBroadcastFilters().size()
+
+    override def partitionAttributes() : Array[NamedReference] =
+      InMemoryBaseTable.this.partitioning.map(_.asInstanceOf[IdentityTransform].ref)
   }
 
   abstract class InMemoryWriterBuilder() extends SupportsTruncate with SupportsDynamicOverwrite

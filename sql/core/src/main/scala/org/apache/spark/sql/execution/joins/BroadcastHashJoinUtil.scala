@@ -234,6 +234,9 @@ object BroadcastHashJoinUtil {
               streamsideLeafJoinAttribIndex)
             val partitionCols = underlyingRuntimeFilteringScan.partitionAttributes().
               map(convertNameReferencesToString).toSet
+            // TODO : Asif Remove this hardcoded check which does not allow partition column to be
+            // used for dpp irrespective of flag. Once we fix the overall code of parition column to
+            // use broadcast var instead of dpp
             if (!partitionCols.contains(streamsideJoinColName)) {
               if (runtimeFilteringBatchScan.runtimeFilters.isEmpty) {
                 Seq(

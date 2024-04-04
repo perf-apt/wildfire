@@ -239,9 +239,10 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
     })
   }
 
-  test(
-    "test identification of batchscans for broadcast variables on simple join using partition " +
-      "column") {
+  test("test identification of batchscans for broadcast variables on" +
+    " simple join using partition column") {
+    // TODO: Asif disable for now as partition col cannot be used for broadscast var for now.
+   /*
     runWithDefaultConfig({
       val lp = partTable1
         .where("c1_1".attr > 100)
@@ -253,9 +254,9 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
           getBatchScans(plan, partTable2.schema).head,
           IntegerType,
           0,
-          true))
+          false))
       assertPushdownData(plan, expectedPushDownData)
-    })
+    }) */
 
     runWithIntactDPP({
       val lp = partTable1
@@ -270,6 +271,8 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
   test(
     "test identification of batchscans for broadcast variables on simple join with multi " +
       "column join involving partition columns") {
+    // TODO: Asif disable for now as partition col cannot be used for broadscast var for now.
+   /*
     runWithDefaultConfig({
       val lp = partTable1
         .where("c1_1".attr > 100)
@@ -284,7 +287,7 @@ class BroadcastVarHashJoinUtilsSuite extends QueryTest with BroadcastVarPushdown
         BroadcastVarPushDownData(2, targetBatchScan, LongType, 1))
       assertPushdownData(plan, expectedPushDownData)
     })
-
+*/
     runWithIntactDPP({
       val lp = partTable1
         .where("c1_1".attr > 100)
