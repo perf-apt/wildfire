@@ -278,8 +278,6 @@ class EarlyCollapseProjectSuite extends QueryTest
     val testDfRows = fullyUnoptTest.collect()
 
     val baseDf = baseDfCreator()
-    val baseDfRows = baseDf.collect()
-    val testDfRows = testExec(baseDf).collect()
     if (useCaching) {
       baseDf.cache()
       assertCacheDependency(baseDfCreator(), 1)
@@ -324,32 +322,6 @@ class EarlyCollapseProjectSuite extends QueryTest
       baseDfCreator().unpersist(true)
       assertCacheDependency(baseDfCreator(), baseAndDerivedIMRsOnBaseInvalidation._1)
       assertCacheDependency(testExec(baseDfCreator()), baseAndDerivedIMRsOnBaseInvalidation._2)
-      checkAnswer(baseDfCreator(), baseDfRows)
-      checkAnswer(testExec(baseDfCreator()), testDfRows)
-      // recache base df so that if existing tests want to continue should work fine
-      newDfOpt.unpersist(true)
-      baseDfCreator().cache()
-    }
-    assert(collectNodes(fullyUnopt).size >= nonOptDfNodes.size)
-    checkAnswer(newDfOpt, fullyUnopt)
-
-    if (useCaching) {
-      // first unpersist both dataframes
-      baseDf.unpersist(true)
-      newDfOpt.unpersist(true)
-      baseDf.cache()
-      newDfOpt.cache()
-      assertCacheDependency(baseDfCreator(), baseAndDerivedIMRsOnCache._1)
-      assertCacheDependency(testExec(baseDfCreator()), baseAndDerivedIMRsOnCache._2)
-      checkAnswer(baseDfCreator(), baseDfRows)
-      checkAnswer(testExec(baseDfCreator()), testDfRows)
-      baseDf.unpersist(true)
-      newDfOpt.unpersist(true)
-      baseDfCreator().cache()
-      testExec(baseDfCreator()).cache()
-      baseDfCreator().unpersist(true)
-      assertCacheDependency(baseDfCreator(), baseAndDerivedIMRsOnCBaseInvalidation._1)
-      assertCacheDependency(testExec(baseDfCreator()), baseAndDerivedIMRsOnCBaseInvalidation._2)
       checkAnswer(baseDfCreator(), baseDfRows)
       checkAnswer(testExec(baseDfCreator()), testDfRows)
       // recache base df so that if existing tests want to continue should work fine
