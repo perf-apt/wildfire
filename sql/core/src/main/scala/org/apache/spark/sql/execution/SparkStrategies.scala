@@ -805,7 +805,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case TransformWithState(
         keyDeserializer, valueDeserializer, groupingAttributes,
         dataAttributes, statefulProcessor, timeoutMode, outputMode,
-        keyEncoder, outputAttr, child) =>
+        keyEncoder, outputAttr, child, hasInitialState,
+        initialStateGroupingAttrs, initialStateDataAttrs,
+        initialStateDeserializer, initialState) =>
         val execPlan = TransformWithStateExec(
           keyDeserializer,
           valueDeserializer,
@@ -820,7 +822,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           batchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
-          planLater(child))
+          planLater(child),
+          isStreaming = true,
+          hasInitialState,
+          initialStateGroupingAttrs,
+          initialStateDataAttrs,
+          initialStateDeserializer,
+          planLater(initialState))
         execPlan :: Nil
       case _ =>
         Nil
@@ -971,10 +979,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         ) :: Nil
       case logical.TransformWithState(keyDeserializer, valueDeserializer, groupingAttributes,
           dataAttributes, statefulProcessor, timeoutMode, outputMode, keyEncoder,
-          outputObjAttr, child) =>
+          outputObjAttr, child, hasInitialState,
+          initialStateGroupingAttrs, initialStateDataAttrs,
+          initialStateDeserializer, initialState) =>
         TransformWithStateExec.generateSparkPlanForBatchQueries(keyDeserializer, valueDeserializer,
           groupingAttributes, dataAttributes, statefulProcessor, timeoutMode, outputMode,
-          keyEncoder, outputObjAttr, planLater(child)) :: Nil
+          keyEncoder, outputObjAttr, planLater(child), hasInitialState,
+          initialStateGroupingAttrs, initialStateDataAttrs,
+          initialStateDeserializer, planLater(initialState)) :: Nil
 
       case _: FlatMapGroupsInPandasWithState =>
         // TODO(SPARK-40443): support applyInPandasWithState in batch query
