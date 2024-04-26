@@ -106,7 +106,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       decimalScale: Int,
       context: QueryContext = null): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       messageParameters = Map(
         "value" -> value.toPlainString,
         "precision" -> decimalPrecision.toString,
@@ -629,7 +629,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def failedToCompileMsg(e: Exception): String = {
-    s"failed to compile: $e"
+    s"Failed to compile: $e"
   }
 
   def internalCompilerError(e: InternalCompilerException): Throwable = {

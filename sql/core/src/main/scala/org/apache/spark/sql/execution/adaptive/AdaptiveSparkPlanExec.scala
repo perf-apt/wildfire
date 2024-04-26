@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import java.util
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -29,6 +29,8 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkException
 import org.apache.spark.broadcast
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.{MDC, MessageWithContext}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -80,14 +82,14 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val lock = new Object()
 
-  @transient private val logOnLevel: ( => String) => Unit = conf.adaptiveExecutionLogLevel match {
-    case "TRACE" => logTrace(_)
-    case "DEBUG" => logDebug(_)
-    case "INFO" => logInfo(_)
-    case "WARN" => logWarning(_)
-    case "ERROR" => logError(_)
-    case _ => logDebug(_)
-  }
+  @transient private val logOnLevel: ( => MessageWithContext) => Unit =
+    conf.adaptiveExecutionLogLevel match {
+      case "TRACE" => logTrace(_)
+      case "INFO" => logInfo(_)
+      case "WARN" => logWarning(_)
+      case "ERROR" => logError(_)
+      case _ => logDebug(_)
+    }
 
   @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
 
@@ -459,8 +461,9 @@ case class AdaptiveSparkPlanExec(
           val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
           if (newCost < origCost ||
             (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
-            logOnLevel("Plan changed:\n" +
-              sideBySide(currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n"))
+            lazy val plans =
+              sideBySide(currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
+            logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
             cleanUpTempTags(newPhysicalPlan)
             currentPhysicalPlan = newPhysicalPlan
             currentLogicalPlan = newLogicalPlan
@@ -524,16 +527,19 @@ case class AdaptiveSparkPlanExec(
     // Start materialization of all new stages and fail fast if any stages failed eagerly
     reorderedNewStages.foreach { stage =>
       try {
-        stage
-          .materialize()
-          .onComplete { res =>
-            if (res.isSuccess) {
-              events.offer(StageSuccess(stage, res.get))
-            } else {
-              events.offer(StageFailure(stage, res.failed.get))
+        stage.materialize().onComplete { res =>
+          if (res.isSuccess) {
+            // record shuffle IDs for successful stages for cleanup
+            stage.plan.collect {
+              case s: ShuffleExchangeLike =>
+                context.shuffleIds.put(s.shuffleId, true)
             }
-            // explicitly clean up the resources in this stage
-            stage.cleanupResources()
+            events.offer(StageSuccess(stage, res.get))
+          } else {
+            events.offer(StageFailure(stage, res.failed.get))
+          }
+          // explicitly clean up the resources in this stage
+          stage.cleanupResources()
           }(AdaptiveSparkPlanExec.executionContext)
       } catch {
         case e: Throwable =>
@@ -677,7 +683,7 @@ case class AdaptiveSparkPlanExec(
     if (shouldUpdatePlan && currentPhysicalPlan.exists(_.subqueries.nonEmpty)) {
       getExecutionId.foreach(onUpdatePlan(_, Seq.empty))
     }
-    logOnLevel(s"Final plan:\n$currentPhysicalPlan")
+    logOnLevel(log"Final plan:\n${MDC(QUERY_PLAN, currentPhysicalPlan)}")
   }
 
   override def executeCollect(): Array[InternalRow] = {
@@ -1171,7 +1177,8 @@ case class AdaptiveSparkPlanExec(
       Some((finalPlan, optimized))
     } catch {
       case e: InvalidAQEPlanException[_] =>
-        logOnLevel(s"Re-optimize - ${e.getMessage()}:\n${e.plan}")
+        logOnLevel(log"Re-optimize - ${MDC(ERROR, e.getMessage())}:\n" +
+          log"${MDC(QUERY_PLAN, e.plan)}")
         None
     }
   }
@@ -1229,7 +1236,8 @@ case class AdaptiveSparkPlanExec(
           s.cancel()
         } catch {
           case NonFatal(t) =>
-            logError(s"Exception in cancelling query stage: ${s.treeString}", t)
+            logError(log"Exception in cancelling query stage: " +
+              log"${MDC(QUERY_PLAN, s.treeString)}", t)
         }
       case _ =>
     }
@@ -1351,6 +1359,8 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val stageCache: TrieMap[SparkPlan, ExchangeQueryStageExec] =
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
+
+  val shuffleIds: ConcurrentHashMap[Int, Boolean] = new ConcurrentHashMap[Int, Boolean]()
 }
 
 /**

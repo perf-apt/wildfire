@@ -15,11 +15,12 @@
 # limitations under the License.
 #
 
+import os
 import unittest
 import uuid
 from collections import defaultdict
 
-
+from pyspark.util import is_remote_only
 from pyspark.errors import (
     PySparkException,
     PySparkValueError,
@@ -46,6 +47,7 @@ if should_test_connect:
     from pyspark.sql.connect.client.core import Retrying, SparkConnectClient
 
 
+@unittest.skipIf(is_remote_only(), "Session creation different from local mode")
 class SparkConnectSessionTests(ReusedConnectTestCase):
     def setUp(self) -> None:
         self.spark = (
@@ -240,6 +242,20 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         session = RemoteSparkSession.builder.channelBuilder(CustomChannelBuilder()).create()
         session.sql("select 1 + 1")
 
+    def test_reset_when_server_session_changes(self):
+        session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
+        # run a simple query so the session id is synchronized.
+        session.range(3).collect()
+
+        # trigger a mismatch between client session id and server session id.
+        session._client._session_id = str(uuid.uuid4())
+        with self.assertRaises(SparkConnectException):
+            session.range(3).collect()
+
+        # assert that getOrCreate() generates a new session
+        session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
+        session.range(3).collect()
+
 
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -248,7 +264,7 @@ class SparkConnectSessionWithOptionsTest(unittest.TestCase):
             .config("integer", 1)
             .config("boolean", False)
             .appName(self.__class__.__name__)
-            .remote("local[4]")
+            .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
             .getOrCreate()
         )
 
@@ -495,6 +511,26 @@ class ChannelBuilderTests(unittest.TestCase):
 
         chan = DefaultChannelBuilder("sc://host/")
         self.assertIsNone(chan.session_id)
+
+    def test_channel_options(self):
+        # SPARK-47694
+        chan = DefaultChannelBuilder(
+            "sc://host", [("grpc.max_send_message_length", 1860), ("test", "robert")]
+        )
+        options = chan._channel_options
+        self.assertEqual(
+            [k for k, _ in options].count("grpc.max_send_message_length"),
+            1,
+            "only one occurrence for defaults",
+        )
+        self.assertEqual(
+            next(v for k, v in options if k == "grpc.max_send_message_length"),
+            1860,
+            "overwrites defaults",
+        )
+        self.assertEqual(
+            next(v for k, v in options if k == "test"), "robert", "new values are picked up"
+        )
 
 
 if __name__ == "__main__":
