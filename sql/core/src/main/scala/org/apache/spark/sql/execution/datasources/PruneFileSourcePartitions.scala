@@ -71,7 +71,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         _,
         _))
         // TODO: Asif : should we keep the check of filters.nonEmpty?
-        if /* filters.nonEmpty && */ fsRelation.partitionSchema.nonEmpty =>
+        /* filters.nonEmpty && */
+        if fsRelation.partitionSchema.nonEmpty =>
         val normalizedFilters = DataSourceStrategy.normalizeExprs(
           filters.filter(f => !SubqueryExpression.hasSubquery(f) &&
             DataSourceUtils.shouldPushFilter(f, fsRelation.fileFormat.supportsCollationPushDown)),
@@ -127,7 +128,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
           val filteredStats =
             FilterEstimation(Filter(partitionKeyFilters.reduce(And), logicalRelation)).estimate
           val colStats = filteredStats.map(_.attributeStats.map { case (attr, colStat) =>
-            (attr.name, colStat.toCatalogColumnStat(attr.name, attr.dataType))
+            (attr.name, colStat.toCatalogColumnStat(attr.name, attr.dataType))})
           val logicalRelationWrapper = LogicalRelationWrapper(logicalRelation, cfi, fsRelation,
             reducedPartitionFilters, filteredStats, colStats)
 
