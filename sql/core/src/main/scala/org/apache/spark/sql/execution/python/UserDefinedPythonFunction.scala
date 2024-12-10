@@ -29,8 +29,9 @@ import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
+import org.apache.spark.sql.internal.ExpressionUtils.expression
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -76,10 +77,10 @@ case class UserDefinedPythonFunction(
    * Returns a [[Column]] that will evaluate the UDF expression with the given input.
    */
   def fromUDFExpr(expr: Expression): Column = {
-    expr match {
+    Column(expr match {
       case udaf: PythonUDAF => udaf.toAggregateExpression()
       case _ => expr
-    }
+    })
   }
 }
 
