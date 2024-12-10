@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{ATTRIBUTE_ID, EXPR, KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{ConstraintHelper, LogicalPlan}
@@ -437,9 +438,8 @@ class ConstraintSet private(
     // Size not matching is an Error situation. This is Unexpected
     // The code below is just to handle unanticipated situation
     if (canonicalized.size != updatedFilterExprs.size) {
-      this.logWarning(s"Canonicalized filter expression set" +
-                        s" not matching with updated filter expressions, indicating duplicate " +
-                        s"filters.")
+      this.logWarning(log"Canonicalized filter expression set" +
+        log" not matching with updated filter expressions, indicating duplicate filters.")
       val duplicateFilters = mutable.ArrayBuffer[Seq[Expression]]()
       canonicalized.foreach(canon => {
         val tempExprs = updatedFilterExprs.filter(_.canonicalized fastEquals canon)
@@ -673,10 +673,10 @@ class ConstraintSet private(
               if (buffer.isEmpty || initialHead != buffer.head) {
                 errorKeys += key
                 this.logWarning(
-                  s"for non GroupHead key attribute" +
-                    s" ${attrib.toString}, It still modified the 0th position of " +
-                    s"buffer with group head key $key. The initial head of buffer was" +
-                    s" ${initialHead.toString}")
+                  log"for non GroupHead key attribute ${MDC(ATTRIBUTE_ID, attrib.toString)}," +
+                  log"It still modified the 0th position of buffer with group head" +
+                  log" ${MDC(KEY, key)}. The initial head of buffer was" +
+                  log" ${MDC(EXPR, initialHead.toString)}")
               }
           }
           if (errorKeys.nonEmpty) {
