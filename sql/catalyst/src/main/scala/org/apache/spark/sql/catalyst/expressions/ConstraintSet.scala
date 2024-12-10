@@ -20,8 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import ConstraintSetImplicit._
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
@@ -124,7 +122,7 @@ class ConstraintSet private(
   import ConstraintSetImplicit._
 
   def this(actuals: mutable.Buffer[Expression]) = this(
-    actuals.map(_.canonicalized).toMutableSet(mutable.Set),
+    actuals.map(_.canonicalized).to(mutable.Set),
     actuals,
     Seq.empty[mutable.Buffer[Attribute]],
     Seq.empty[mutable.Buffer[Expression]])
@@ -134,7 +132,7 @@ class ConstraintSet private(
       attribRefBasedEquivalenceList: Seq[mutable.Buffer[Attribute]],
       expressionBasedEquivalenceList: Seq[mutable.Buffer[Expression]]) =
     this(
-      actuals.map(_.canonicalized).toMutableSet(mutable.Set),
+      actuals.map(_.canonicalized).to(mutable.Set),
       actuals,
       attribRefBasedEquivalenceList,
       expressionBasedEquivalenceList)
@@ -400,7 +398,8 @@ class ConstraintSet private(
         val newConstraintOpt = if (expr.references.isEmpty) {
           buffer.remove(0)
           expr match {
-            case NonNullLiteral(_, _) | _: NullIntolerant => Some(EqualTo(buffer.head, expr))
+            case NonNullLiteral(_, _) => Some(EqualTo(buffer.head, expr))
+            case _ if expr.nullIntolerant => Some(EqualTo(buffer.head, expr))
             case _ => Some(EqualNullSafe(buffer.head, expr))
           }
         } else {
@@ -894,10 +893,10 @@ class ConstraintSet private(
       this
     } else {
       ExpressionSet(this.originals.map(expr => expr match {
-        case _: NullIntolerant =>
+        case _ if expr.nullIntolerant =>
           var hasHidden = false
           val temp = expr.transformDown {
-            case x: NullIntolerant => x
+            case x if x.nullIntolerant => x
             case x =>
               // check for constants/literals etc, they may be under cast
               val hasAttribDependency = x.references.nonEmpty
