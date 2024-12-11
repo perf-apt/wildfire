@@ -99,7 +99,7 @@ class QueryExecution(
     val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
       // We can't clone `logical` here, which will reset the `_analyzed` flag.
       val skipDedupRule = withRelations.nonEmpty
-      val planToAnalyze = if (skipDedupRule) {
+      val planToAnalyze = if (skipDedupRule && !logical.analyzed) {
         SkipDedupRelRuleMarker(logical)
       } else {
         logical
