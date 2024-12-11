@@ -99,7 +99,7 @@ class QueryExecution(
     val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
       // We can't clone `logical` here, which will reset the `_analyzed` flag.
       val skipDedupRule = withRelations.nonEmpty
-      val planToAnalyze = if (skipDedupRule && !logical.analyzed) {
+      val planToAnalyze = if (skipDedupRule) {
         SkipDedupRelRuleMarker(logical)
       } else {
         logical
@@ -132,11 +132,15 @@ class QueryExecution(
   def getRelations: Set[RelationWrapper] = identifiedRelations
 
   def getCombinedRelations(thatQe: QueryExecution): Set[RelationWrapper] = {
-    val thatRelations = thatQe.getRelations
-    if (this.getRelations.exists(thatRelations.contains)) {
+    if (this.isLazyAnalysis || thatQe.isLazyAnalysis) {
       Set.empty
     } else {
-      this.getRelations ++ thatRelations
+      val thatRelations = thatQe.getRelations
+      if (this.getRelations.exists(thatRelations.contains)) {
+        Set.empty
+      } else {
+        this.getRelations ++ thatRelations
+      }
     }
   }
 

@@ -734,7 +734,7 @@ class Dataset[T] private[sql](
         joinType,
         joinExprs.map(_.expr)
       )
-    }
+    }(this.queryExecution.getCombinedRelations(right.queryExecution))
   }
 
   /** @inheritdoc */
