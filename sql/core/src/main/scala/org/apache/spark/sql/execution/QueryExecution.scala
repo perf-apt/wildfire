@@ -122,7 +122,7 @@ class QueryExecution(
           }.flatten).toSet
     }.flatten.toSet
 
-    if (this.withRelations.isEmpty) {
+    if (this.withRelations.isEmpty && !this.isLazyAnalysis) {
       collectRelations(this.analyzed)
     } else {
       this.withRelations
@@ -136,7 +136,8 @@ class QueryExecution(
       Set.empty
     } else {
       val thatRelations = thatQe.getRelations
-      if (this.getRelations.exists(thatRelations.contains)) {
+      if (this.getRelations.isEmpty || thatRelations.isEmpty ||
+        this.getRelations.exists(thatRelations.contains)) {
         Set.empty
       } else {
         this.getRelations ++ thatRelations
