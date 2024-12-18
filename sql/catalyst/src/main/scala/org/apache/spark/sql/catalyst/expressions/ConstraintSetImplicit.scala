@@ -25,7 +25,6 @@ object ConstraintSetImplicit {
     new Wrapper(self)
 
   class Wrapper[T](val coll: scala.collection.Iterable[T]) {
-
     def toMutableSet(mutableSet: mutable.Set.type): mutable.Set[T] =
       coll.to(mutable.Set)
 
@@ -33,4 +32,3 @@ object ConstraintSetImplicit {
       coll.to(mutable.Buffer)
   }
 }
-

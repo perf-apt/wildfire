@@ -146,9 +146,15 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
     val aliasedRelation = tr.where($"a".attr > 10).select($"a".as("x"), $"b",
       $"b".as("y"), $"a".as("z"))
 
-    verifyConstraints(ExpressionSet(aliasedRelation.analyze.constraints),
-        ExpressionSet(Seq(resolveColumn(aliasedRelation.analyze, "x") > 10,
-          IsNotNull(resolveColumn(aliasedRelation.analyze, "x")))))
+    verifyConstraints(
+      ExpressionSet(aliasedRelation.analyze.constraints),
+      ExpressionSet(
+        Seq(
+          resolveColumn(aliasedRelation.analyze, "x") > 10,
+          IsNotNull(resolveColumn(aliasedRelation.analyze, "x"))
+        )
+      )
+    )
 
     val multiAlias = tr.where($"a" === $"c" + 10).select($"a".as("x"), $"c".as("y"))
     verifyConstraints(multiAlias.analyze.constraints,
@@ -195,8 +201,8 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
       .where($"a".attr > 10 && $"b".attr < 10)
       .union(tr2.where($"d".attr > 11 && $"e".attr < 11))
       .analyze.constraints,
-      new ConstraintSet(mutable.Buffer(cond1, cond2,
-        IsNotNull(a), IsNotNull(b))))
+      new ConstraintSet(mutable.Buffer(cond1, cond2, IsNotNull(a), IsNotNull(b)))
+    )
   }
 
   test("propagating constraints in intersect") {

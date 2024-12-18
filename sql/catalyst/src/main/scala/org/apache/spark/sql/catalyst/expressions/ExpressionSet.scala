@@ -21,7 +21,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 object ExpressionSet {
-
   /**
    * Constructs a new [[ExpressionSet]] by applying [[Expression#canonicalized]] to `expressions`.
    */
@@ -97,9 +96,8 @@ class ExpressionSet protected(
     this.constructNew(newBaseSet, newOriginals)
   }
 
-  def constructNew(
-      newBaseSet: mutable.Set[Expression] = new mutable.HashSet,
-      newOriginals: mutable.Buffer[Expression] = new ArrayBuffer): ExpressionSet =
+  def constructNew(newBaseSet: mutable.Set[Expression] = new mutable.HashSet,
+    newOriginals: mutable.Buffer[Expression] = new ArrayBuffer): ExpressionSet =
     new ExpressionSet(newBaseSet, newOriginals)
 
   def +(elem: Expression): ExpressionSet = {
@@ -156,6 +154,7 @@ class ExpressionSet protected(
 
   override def equals(obj: Any): Boolean = obj match {
     case other: ExpressionSet => this.baseSet == other.baseSet
+
     case _ => false
   }
 
@@ -172,17 +171,16 @@ class ExpressionSet protected(
       outputAttribs: Seq[Attribute],
       inputAttribs: Seq[Attribute], projectList: Seq[NamedExpression],
       oldAliasedConstraintsCreator: Option[Seq[NamedExpression] => ExpressionSet]): ExpressionSet =
-    oldAliasedConstraintsCreator.map(aliasCreator => this.union(aliasCreator(projectList)))
-      .getOrElse(this)
+    oldAliasedConstraintsCreator.map(aliasCreator =>
+      this.union(aliasCreator(projectList))).getOrElse(this)
 
   def attributesRewrite(mapping: AttributeMap[Attribute]): ExpressionSet =
     ExpressionSet(this.map(_ transform {
       case a: Attribute => mapping(a)
     }))
 
-  def withNewConstraints(
-      filters: ExpressionSet,
-      attribEquiv: Seq[mutable.Buffer[Attribute]]): ExpressionSet = ExpressionSet(filters)
+  def withNewConstraints(filters: ExpressionSet,
+    attribEquiv: Seq[mutable.Buffer[Attribute]]): ExpressionSet = ExpressionSet(filters)
 
   def rewriteUsingAlias(expr: Expression): Expression = expr
 

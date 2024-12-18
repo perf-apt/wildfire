@@ -90,8 +90,9 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   }
 
 
-  override lazy val validConstraints: ExpressionSet = child.constraints.updateConstraints(
-    this.output, child.output, this.projectList, Option(getAllValidConstraints))
+  override lazy val validConstraints: ExpressionSet =
+    child.constraints.updateConstraints(this.output, child.output, this.projectList,
+      Option(getAllValidConstraints))
 
   override def metadataOutput: Seq[Attribute] =
     getTagValue(Project.hiddenOutputTag).getOrElse(child.metadataOutput)
@@ -333,8 +334,8 @@ case class Filter(condition: Expression, child: LogicalPlan)
   final override val nodePatterns: Seq[TreePattern] = Seq(FILTER)
 
   override lazy val validConstraints: ExpressionSet = {
-    val predicates = splitConjunctivePredicates(condition)
-          .filterNot(SubqueryExpression.hasCorrelatedSubquery)
+    val predicates = splitConjunctivePredicates(condition).filterNot(
+      SubqueryExpression.hasCorrelatedSubquery)
     // remove useless nullsafe filter if any for EqualTo predicates which are present
     val nullSafePredsToRemove = predicates.flatMap[Expression] {
         case EqualTo(l: Attribute, r: Attribute) => Seq(EqualNullSafe(l, r))
@@ -547,18 +548,17 @@ case class Union(
     common ++ others
   }
 
-  override lazy val validConstraints: ExpressionSet = {
+  override lazy val validConstraints: ExpressionSet =
     if (conf.constraintPropagationEnabled) {
-         val head = children.head
-        val headOutput = head.output
-        val remaining = children.slice(1, children.length)
-        remaining.foldLeft(head.constraints.asInstanceOf[ConstraintSet])((constraint, node) =>
-          ConstraintSet.unionWith(constraint, node, headOutput))
+      val head = children.head
+      val headOutput = head.output
+      val remaining = children.slice(1, children.length)
+      remaining.foldLeft(head.constraints.asInstanceOf[ConstraintSet])((constraint, node) =>
+        ConstraintSet.unionWith(constraint, node, headOutput))
     } else {
-      children.map(child => rewriteConstraints(children.head.output,
-        child.output, child.constraints)).reduce(merge(_, _))
+      children.map(child =>
+        rewriteConstraints(children.head.output, child.output, child.constraints)).reduce(merge)
     }
-  }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[LogicalPlan]): Union =
     copy(children = newChildren)
@@ -646,10 +646,12 @@ case class Join(
         left.constraints
       case RightOuter =>
         right.constraints
-
-      case _ => if (conf.constraintPropagationEnabled) {
-        new ConstraintSet()
-      } else ExpressionSet()
+      case _ =>
+        if (conf.constraintPropagationEnabled) {
+          new ConstraintSet()
+        } else {
+          ExpressionSet()
+        }
     }
   }
 
@@ -1243,8 +1245,8 @@ case class Aggregate(
 
   override lazy val validConstraints: ExpressionSet = {
     val nonAgg = aggregateExpressions.filter(!_.exists(_.isInstanceOf[AggregateExpression]))
-    child.constraints.updateConstraints(this.output,
-     child.output, nonAgg, Option(getAllValidConstraints))
+    child.constraints.updateConstraints(this.output, child.output, nonAgg,
+      Option(getAllValidConstraints))
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =

@@ -40,7 +40,6 @@ class ExpressionMap[T](val baseMap: mutable.Map[Expression, T] = new mutable.Has
 
   override def get(expr: Expression): Option[T] = baseMap.get(expr.canonicalized)
 
-
   override def addOne(tup: (Expression, T)): this.type = {
     this.baseMap += (tup._1.canonicalized -> tup._2)
     this

@@ -98,12 +98,16 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     }
     new File(goldenFilePath, goldenFileName)
   }
-  class MatchResult(val isMatch: Boolean, val simplifiedMatch: Boolean, val explainedMatch: Boolean,
-    val expectedSimplified: String, val expectedExplain: String)
+
+  class MatchResult(
+      val isMatch: Boolean,
+      val simplifiedMatch: Boolean,
+      val explainedMatch: Boolean,
+      val expectedSimplified: String,
+      val expectedExplain: String)
 
   private def isApproved(dir: File, actualSimplifiedPlan: String, actualExplain: String):
-  MatchResult =
-  {
+  MatchResult = {
     val goldenFileName = "simplified.txt"
     val file = new File(dir, goldenFileName)
     val expectedSimplified = FileUtils.readFileToString(file, StandardCharsets.UTF_8)
@@ -125,7 +129,6 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     }
     new MatchResult(matched, simplifiedMatch, explainedMatch, expectedSimplified,
         expectedExplain)
-
   }
 
   /**
@@ -140,7 +143,6 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   private def generateGoldenFile(plan: SparkPlan, name: String, explain: String): Unit = {
     val dir = getDirForTest(name)
     val simplified = getSimplifiedPlan(plan)
-
     val foundMatch = dir.exists() && isApproved(dir, simplified, explain).isMatch
 
     if (!foundMatch) {
@@ -174,15 +176,17 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
       FileUtils.writeStringToFile(actualExplainFile, explain, StandardCharsets.UTF_8)
       val builder = new StringBuilder
       if (!matchResult.simplifiedMatch) {
-        builder.append("simplified plans did not match").append("\n actual simplified =\n").
-          append(actualSimplified).append("\n\n approved simplified=\n").
-          append(matchResult.expectedSimplified)
+        builder
+          .append("simplified plans did not match").append("\n actual simplified =\n")
+          .append(actualSimplified).append("\n\n approved simplified=\n")
+          .append(matchResult.expectedSimplified)
       }
-
       if (!matchResult.explainedMatch) {
-        builder.append("explain plans did not match").append("\n actual explain =\n").
-          append(explain).append("\n\n approved explain=\n").
-          append(matchResult.expectedExplain)
+        builder
+          .append("explain plans did not match")
+          .append("\n actual explain =\n")
+          .append(explain).append("\n\n approved explain=\n")
+          .append(matchResult.expectedExplain)
       }
       fail(
         s"""

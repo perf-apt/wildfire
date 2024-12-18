@@ -28,10 +28,12 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    * example, if this set contains the expression `a = 2` then that expression is guaranteed to
    * evaluate to `true` for all rows produced.
    */
-  lazy val constraints: ExpressionSet = if (conf.constraintPropagationEnabled) {
-    val newConstraints = validConstraints.union(
-      inferAdditionalConstraints(validConstraints)).union(constructIsNotNullConstraints(
-        validConstraints.getConstraintsWithDecanonicalizedNullIntolerant, output))
+  lazy val constraints: ExpressionSet =
+    if (conf.constraintPropagationEnabled) {
+      val newConstraints = validConstraints
+        .union(inferAdditionalConstraints(validConstraints))
+        .union(constructIsNotNullConstraints(
+          validConstraints.getConstraintsWithDecanonicalizedNullIntolerant, output))
       // Removed the criteria  c.references.nonEmpty as it was causing a constraint of the
       // of the form literal true or false being eliminated, causing idempotency check failure
       newConstraints.filter(c => c.references.subsetOf(outputSet) && c.deterministic)
@@ -49,7 +51,9 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
    */
   protected lazy val validConstraints: ExpressionSet = if (conf.constraintPropagationEnabled) {
     new ConstraintSet()
-  } else ExpressionSet(Set.empty[Expression])
+  } else {
+    ExpressionSet(Set.empty[Expression])
+  }
 
   // For testing purposes
   def getValidConstraints: ExpressionSet = validConstraints
@@ -88,9 +92,10 @@ trait ConstraintHelper {
   private def replaceConstraints(
       constraints: ExpressionSet,
       source: Expression,
-      destination: Expression): ExpressionSet = constraints.map(_ transform {
-    case e: Expression if e.semanticEquals(source) => destination
-  })
+      destination: Expression): ExpressionSet =
+    constraints.map(_ transform {
+      case e: Expression if e.semanticEquals(source) => destination
+    })
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as

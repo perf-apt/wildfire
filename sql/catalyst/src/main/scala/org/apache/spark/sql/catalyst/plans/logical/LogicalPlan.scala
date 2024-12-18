@@ -283,8 +283,9 @@ trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
     allConstraints
   }
 
-  override lazy val validConstraints: ExpressionSet = if (!this.inputSet.subsetOf(this.outputSet)) {
-    child.constraints.updateConstraints(
+  override lazy val validConstraints: ExpressionSet =
+    if (!this.inputSet.subsetOf(this.outputSet)) {
+      child.constraints.updateConstraints(
       this.output, child.output, Seq.empty[NamedExpression], None)
     } else {
       child.constraints
