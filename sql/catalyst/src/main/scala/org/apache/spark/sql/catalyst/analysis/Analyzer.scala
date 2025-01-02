@@ -264,7 +264,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           singlePassMetadataResolverExtensions
         )
       ).apply(plan, tracker)
-     
+
       val excludedPostAnalysisRulesConf =
         conf.postAnalysisExcludesRules.toSeq.flatMap(Utils.stringToSeq)
       postAnalysisEarlyOptimizationRules.filterNot(
