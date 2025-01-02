@@ -1032,7 +1032,7 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   def transpose(indexColumn: Column): DataFrame = withPlan {
     UnresolvedTranspose(
-      Seq(indexColumn.named),
+      Seq(indexColumn.expr),
       logicalPlan
     )
   }
@@ -1639,6 +1639,7 @@ class Dataset[T] private[sql](
         name = TableIdentifier(identifier.last),
         userSpecifiedColumns = Nil,
         comment = None,
+        collation = None,
         properties = Map.empty,
         originalText = None,
         plan = logicalPlan,
