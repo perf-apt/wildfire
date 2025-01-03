@@ -268,7 +268,11 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.streaming.DataStreamReader.validateJsonSchema"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.DataStreamReader.validateXmlSchema"))
+        "org.apache.spark.sql.streaming.DataStreamReader.validateXmlSchema"),
+
+      // SQLContext withRelations is an internal method not needed for connect
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "org.apache.spark.sql.SQLContext.withRelations"))
 
     checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
   }
@@ -333,9 +337,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$ListTableRow"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.SQLContext$ListTableRow$"),
-      // withRelations is an internal method not needed for connect
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SQLContext.withRelations"),
 
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.session"),
