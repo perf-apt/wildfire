@@ -271,8 +271,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.DataStreamReader.validateXmlSchema"),
 
       // SQLContext withRelations is an internal method not needed for connect
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "org.apache.spark.sql.SQLContext.withRelations"))
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SQLContext.withRelations"))
 
     checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
   }
