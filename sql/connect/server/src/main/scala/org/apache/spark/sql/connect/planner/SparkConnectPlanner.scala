@@ -45,7 +45,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LazyExpression, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LazyExpression, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -566,10 +566,9 @@ class SparkConnectPlanner(
   }
 
   private def transformToDF(rel: proto.ToDF): LogicalPlan = {
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .toDF(rel.getColumnNamesList.asScala.toSeq: _*)
-      .logicalPlan
+    UnresolvedSubqueryColumnAliases(
+      rel.getColumnNamesList.asScala.toSeq,
+      transformRelation(rel.getInput))
   }
 
   private def transformMapPartitions(rel: proto.MapPartitions): LogicalPlan = {
@@ -1655,14 +1654,18 @@ class SparkConnectPlanner(
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = fun.getIsDistinct)
     } else {
-      // Spark Connect historically used the global namespace to lookup a couple of internal
-      // functions (e.g. product, collect_top_k, unwrap_udt, ...). In Spark 4 we moved these
-      // functions to a dedicated namespace, however in order to stay backwards compatible we still
-      // need to allow connect to use the global namespace. Here we check if a function is
-      // registered in the internal function registry, and we reroute the lookup to the internal
-      // registry.
       val name = fun.getFunctionName
-      val internal = FunctionRegistry.internal.functionExists(FunctionIdentifier(name))
+      val internal = if (fun.hasIsInternal) {
+        fun.getIsInternal
+      } else {
+        // Spark Connect historically used the global namespace to look up a couple of internal
+        // functions (e.g. product, collect_top_k, unwrap_udt, ...). In Spark 4 we moved these
+        // functions to a dedicated namespace, however in order to stay backwards compatible we
+        // still need to allow Connect to use the global namespace. Here we check if a function is
+        // registered in the internal function registry, and we reroute the lookup to the internal
+        // registry.
+        FunctionRegistry.internal.functionExists(FunctionIdentifier(name))
+      }
       UnresolvedFunction(
         name :: Nil,
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,

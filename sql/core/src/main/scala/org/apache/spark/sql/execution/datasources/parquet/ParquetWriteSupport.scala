@@ -158,7 +158,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         s"""Initialized Parquet WriteSupport with Catalyst schema:
            |${schema.prettyJson}
            |and shredding schema:
-           |$shreddedSchema.prettyJson}
+           |${shreddedSchema.prettyJson}
            |and corresponding Parquet message type:
            |$messageType
          """.stripMargin)
@@ -539,14 +539,14 @@ object ParquetWriteSupport {
   val SPARK_VARIANT_SHREDDING_SCHEMA: String =
     "org.apache.spark.sql.parquet.variant.shredding.attributes"
 
-  def setSchema(schema: StructType, configuration: Configuration,
-      shreddingSchema: Option[StructType]): Unit = {
+  def setSchema(schema: StructType, configuration: Configuration): Unit = {
     configuration.set(SPARK_ROW_SCHEMA, schema.json)
     configuration.setIfUnset(
       ParquetOutputFormat.WRITER_VERSION,
       ParquetProperties.WriterVersion.PARQUET_1_0.toString)
-    shreddingSchema.foreach { s =>
-      configuration.set(SPARK_VARIANT_SHREDDING_SCHEMA, s.json)
-    }
+  }
+
+  def setShreddingSchema(shreddingSchema: StructType, configuration: Configuration): Unit = {
+    configuration.set(SPARK_VARIANT_SHREDDING_SCHEMA, shreddingSchema.json)
   }
 }
