@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
-import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession, TableArg, TableValuedFunctionArgument}
 import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -95,19 +95,19 @@ case class UserDefinedPythonTableFunction(
     udfDeterministic: Boolean) {
 
   def this(
-      name: String,
-      func: PythonFunction,
-      returnType: StructType,
-      pythonEvalType: Int,
-      udfDeterministic: Boolean) = {
+            name: String,
+            func: PythonFunction,
+            returnType: StructType,
+            pythonEvalType: Int,
+            udfDeterministic: Boolean) = {
     this(name, func, Some(returnType), pythonEvalType, udfDeterministic)
   }
 
   def this(
-      name: String,
-      func: PythonFunction,
-      pythonEvalType: Int,
-      udfDeterministic: Boolean) = {
+            name: String,
+            func: PythonFunction,
+            pythonEvalType: Int,
+            udfDeterministic: Boolean) = {
     this(name, func, None, pythonEvalType, udfDeterministic)
   }
 
@@ -161,8 +161,16 @@ case class UserDefinedPythonTableFunction(
   }
 
   /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
-  def apply(session: SparkSession, exprs: Column*): DataFrame = {
-    val udtf = builder(exprs.map(session.expression), session.sessionState.sqlParser)
+  def apply(session: SparkSession, exprs: TableValuedFunctionArgument*): DataFrame = {
+    val parser = session.sessionState.sqlParser
+    val expressions = exprs.map {
+      case col: Column => session.expression(col)
+      case tableArg: TableArg => tableArg.expression
+      case other => throw new IllegalArgumentException(
+        s"Unsupported argument type: ${other.getClass.getName}"
+      )
+    }
+    val udtf = builder(expressions, parser)
     implicit val withRelations: Set[RelationWrapper] = Set.empty
     Dataset.ofRows(session, udtf)
   }
