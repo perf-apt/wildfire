@@ -909,7 +909,7 @@ case class DescribeTableJsonCommand(
         )
 
       case _ =>
-        JObject("name" -> JString(dataType.typeName))
+        JObject("name" -> JString(dataType.simpleString))
     }
   }
 
