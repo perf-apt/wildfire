@@ -275,7 +275,7 @@ class Dataset[T] private[sql](
   def this(
       sparkSession: SparkSession,
       logicalPlan: LogicalPlan,
-      encoderGenerator: () => Encoder[T]) (implicit  withRelations: Set[RelationWrapper])= {
+      encoderGenerator: () => Encoder[T]) (implicit  withRelations: Set[RelationWrapper]) = {
     this(sparkSession.sessionState.executePlan(logicalPlan), encoderGenerator)
   }
 
