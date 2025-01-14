@@ -96,7 +96,8 @@ private[sql] object Dataset {
   def apply[T](
       sparkSession: SparkSession,
       logicalPlan: LogicalPlan,
-      encoderGenerator: () => Encoder[T]): Dataset[T] = {
+      encoderGenerator: () => Encoder[T])(implicit  withRelations: Set[RelationWrapper]):
+  Dataset[T] = {
     val dataset = new Dataset(sparkSession, logicalPlan, encoderGenerator)
     // Eagerly bind the encoder so we verify that the encoder matches the underlying
     // schema. The user will get an error if this is not the case.
@@ -272,7 +273,9 @@ class Dataset[T] private[sql](
   }
 
   def this(
-      sparkSession: SparkSession, logicalPlan: LogicalPlan, encoderGenerator: () => Encoder[T]) = {
+      sparkSession: SparkSession,
+      logicalPlan: LogicalPlan,
+      encoderGenerator: () => Encoder[T]) (implicit  withRelations: Set[RelationWrapper])= {
     this(sparkSession.sessionState.executePlan(logicalPlan), encoderGenerator)
   }
 
@@ -1294,29 +1297,14 @@ class Dataset[T] private[sql](
     require(colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
-    SchemaUtils.checkColumnNameDuplication(
-      colNames,
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
-
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val output = queryExecution.analyzed.output
-
-    val columnSeq = colNames.zip(cols)
-
-    val replacedAndExistingColumns = output.map { field =>
-      columnSeq.find { case (colName, _) =>
-        resolver(field.name, colName)
-      } match {
-        case Some((colName: String, col: Column)) => col.as(colName)
-        case _ => Column(field)
-      }
+    withPlan {
+      Project(
+        Seq(
+          UnresolvedStarWithColumns(
+            colNames = colNames,
+            exprs = cols.map(_.expr))),
+        logicalPlan)
     }
-
-    val newColumns = columnSeq.filter { case (colName, col) =>
-      !output.exists(f => resolver(f.name, colName))
-    }.map { case (colName, col) => col.as(colName) }
-
-    select(replacedAndExistingColumns ++ newColumns : _*)
   }
 
   /** @inheritdoc */
@@ -1343,26 +1331,13 @@ class Dataset[T] private[sql](
     require(colNames.size == newColNames.size,
       s"The size of existing column names: ${colNames.size} isn't equal to " +
         s"the size of new column names: ${newColNames.size}")
-
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val output: Seq[NamedExpression] = queryExecution.analyzed.output
-    var shouldRename = false
-
-    val projectList = colNames.zip(newColNames).foldLeft(output) {
-      case (attrs, (existingName, newName)) =>
-        attrs.map(attr =>
-          if (resolver(attr.name, existingName)) {
-            shouldRename = true
-            Alias(attr, newName)()
-          } else {
-            attr
-          }
-        )
-    }
-    if (shouldRename) {
-      withPlan(Project(projectList, logicalPlan))
-    } else {
-      toDF()
+    withPlan {
+      Project(
+        Seq(
+          UnresolvedStarWithColumnsRenames(
+            existingNames = colNames,
+            newNames = newColNames)),
+        logicalPlan)
     }
   }
 
