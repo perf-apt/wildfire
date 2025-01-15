@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.catalyst.analysis.{SQLFunctionExpression, SQLScalarFunction}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Expression, NamedExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -94,7 +95,15 @@ private[sql] object EarlyCollapseProject extends Rule[LogicalPlan] {
     p.projectList.forall(_.collectFirst {
       case ex if !ex.deterministic => ex
       case ex: UserDefinedExpression => ex
+    }.isEmpty) &&
+    // Because functions take incoming attributes as parameter and the function code is using
+    // those attributes, it is wrong to collapse the attribute function input with its replacement
+    newP.projectList.forall(_.collectFirst {
+      case ex: SQLFunctionExpression => ex
+      case ex: SQLScalarFunction => ex
     }.isEmpty)
+
+
 
   private def transferMetadata(from: Attribute, to: NamedExpression): NamedExpression =
     if (from.metadata == Metadata.empty) {
