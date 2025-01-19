@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connector.read;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
@@ -65,6 +68,10 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    */
   void filter(Predicate[] predicates);
 
+  default boolean hasPushedBroadCastFilter() {return false;}
+
+  default NamedReference[] allAttributes() { return new NamedReference[0];}
+
   /**
    * This method should be implemented by the DataSourceV2 Scan which should check for equality
    * of Scan without taking into account pushed runtime filters (DPP)
@@ -75,6 +82,7 @@ public interface SupportsRuntimeV2Filtering extends Scan {
     return this.equals(other);
   }
 
+
   /**
    * This method should be implemented by the DataSourceV2 Scan to return the hashCode excluding
    * the runtime filters (DPP) pushed to scan.
@@ -83,4 +91,20 @@ public interface SupportsRuntimeV2Filtering extends Scan {
   default int hashCodeIgnoreRuntimeFilters() {
     return this.hashCode();
   }
+
+  default List<PushedBroadcastFilterData> getPushedBroadcastFilters() {
+    return Collections.emptyList();
+  }
+
+  default Set<Long> getPushedBroadcastVarIds() {
+    return Collections.emptySet();
+  }
+
+  default int getPushedBroadcastFiltersCount() {
+    return 0;
+  }
+
+  default NamedReference[] partitionAttributes() {return new NamedReference[0];}
+
+  default void postAllBroadcastVarsPushed() {}
 }
