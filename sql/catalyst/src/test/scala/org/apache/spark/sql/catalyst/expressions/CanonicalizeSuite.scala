@@ -352,6 +352,23 @@ class CanonicalizeSuite extends SparkFunSuite {
     SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key, default.toString)
   }
 
+  test("SPARK-45658: DynamicPruningSubquery canonicalization build keys not canonicalized" +
+    " relative to build query output") {
+    val pruneExprId = NamedExpression.newExprId
+    val pruneKey = AttributeReference("dummy", IntegerType)(pruneExprId)
+    val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
+
+    val buildQueryPlan1 = testRelation.where("a".attr > 10).select($"b".attr * Literal(5)).analyze
+    val buildKeys1 = Seq(buildQueryPlan1.output.head)
+    val dps1 = DynamicPruningSubquery(pruneKey, buildQueryPlan1, buildKeys1, Seq(0), true)
+
+    val buildQueryPlan2 = testRelation.where("a".attr > 10).select($"b".attr * Literal(5)).analyze
+    val buildKeys2 = Seq(buildQueryPlan2.output.head)
+    val dps2 = DynamicPruningSubquery(pruneKey, buildQueryPlan2, buildKeys2, Seq(0), true)
+
+    assert(dps1.canonicalized == dps2.canonicalized)
+  }
+
   test("canonicalization of With expressions with one common expression") {
     val expr = Divide(Literal.create(1, IntegerType), AttributeReference("a", IntegerType)())
     val common1 = IsNull(With(expr.copy()) { case Seq(expr) =>
