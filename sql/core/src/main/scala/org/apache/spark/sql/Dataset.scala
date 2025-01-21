@@ -706,7 +706,9 @@ class Dataset[T] private[sql](
       joinType: String) = {
     val planPart1 = withPlan(
       Join(logicalPlan, right.logicalPlan,
-        JoinType(joinType), None, JoinHint.NONE)).queryExecution.analyzed.asInstanceOf[Join]
+        JoinType(joinType), None, JoinHint.NONE))(
+        this.queryExecution.getCombinedRelations(right.queryExecution))
+      .queryExecution.analyzed.asInstanceOf[Join]
 
     val leftTagIdMap = planPart1.left.getTagValue(DATASET_ID_TAG)
     val rightTagIdMap = planPart1.right.getTagValue(DATASET_ID_TAG)
