@@ -31,7 +31,7 @@ on:
         required: false
         type: string
         # Change 'master' to 'branch-4.0' in branch-4.0 branch after cutting it.
-        default: branch-4.0
+        default: branch-4.0-13107980696
       branch:
         description: Branch to run the build against
         required: false
