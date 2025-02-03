@@ -435,7 +435,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./dev/infra/
-          push: false
+          push: true
           tags: |
             ${{ needs.precondition.outputs.image_url }}
           # Use the infra image cache to speed up
@@ -446,7 +446,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./dev/spark-test-image/docs/
-          push: false
+          push: true
           tags: |
             ${{ needs.precondition.outputs.image_docs_url }}
           # Use the infra image cache to speed up
@@ -457,7 +457,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./dev/spark-test-image/lint/
-          push: false
+          push: true
           tags: |
             ${{ needs.precondition.outputs.image_lint_url }}
           # Use the infra image cache to speed up
@@ -468,7 +468,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./dev/spark-test-image/sparkr/
-          push: false
+          push: true
           tags: |
             ${{ needs.precondition.outputs.image_sparkr_url }}
           # Use the infra image cache to speed up
@@ -480,7 +480,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./dev/spark-test-image/${{ env.PYSPARK_IMAGE_TO_TEST }}/
-          push: false
+          push: true
           tags: |
             ${{ needs.precondition.outputs.image_pyspark_url }}
           # Use the infra image cache to speed up
