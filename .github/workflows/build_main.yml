@@ -19,10 +19,13 @@
 
 name: "Build"
 
-on: [push, workflow_dispatch]:
-  branches:
-   - '**'
-
+on:
+  push:
+    branches:
+    - '**'
+  workflow_dispatch:
+    branches:
+      - '**'
 jobs:
   call-build-and-test:
     permissions:
