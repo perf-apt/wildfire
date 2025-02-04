@@ -26,12 +26,6 @@ on:
         required: false
         type: string
         default: 17
-      branch-docker-image:
-        description: Branch get docker image from
-        required: false
-        type: string
-        # Change 'master' to 'branch-4.0' in branch-4.0 branch after cutting it.
-        default: master
       branch:
         description: Branch to run the build against
         required: false
@@ -450,7 +444,7 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_docs_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch-docker-image }}
+          cache-from: type=registry,ref=ghcr.io/perf-apt/wildfire/perf-apt-wildfire-github-action-image-docs-cache:${{ inputs.branch }}
       - name: Build and push (Linter)
         if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).lint == 'true' && hashFiles('dev/spark-test-image/lint/Dockerfile') != '' }}
         id: docker_build_lint
@@ -461,7 +455,7 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_lint_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch-docker-image }}
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch }}
       - name: Build and push (SparkR)
         if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).sparkr == 'true' && hashFiles('dev/spark-test-image/sparkr/Dockerfile') != '' }}
         id: docker_build_sparkr
@@ -472,7 +466,7 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_sparkr_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch-docker-image}}
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }}
       - name: Build and push (PySpark with ${{ env.PYSPARK_IMAGE_TO_TEST }})
         if: ${{ inputs.branch != 'branch-3.5' && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true') && env.PYSPARK_IMAGE_TO_TEST != '' }}
         id: docker_build_pyspark
@@ -484,7 +478,7 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_pyspark_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}-cache:${{ inputs.branch-docker-image }}
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}-cache:${{ inputs.branch }}
 
 
   pyspark:
