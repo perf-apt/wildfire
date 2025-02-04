@@ -162,7 +162,7 @@ jobs:
       run: |
         # Convert to lowercase to meet Docker repo name requirement
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-        IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
+        IMG_NAME="perf-apt-wildfire-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Generate infra image URL (Documentation)
@@ -170,7 +170,7 @@ jobs:
       run: |
         # Convert to lowercase to meet Docker repo name requirement
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-        IMG_NAME="apache-spark-ci-image-docs:${{ inputs.branch }}-${{ github.run_id }}"
+        IMG_NAME="perf-apt-wildfire-ci-image-docs:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_docs_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Generate infra image URL (Linter)
@@ -178,7 +178,7 @@ jobs:
       run: |
         # Convert to lowercase to meet Docker repo name requirement
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-        IMG_NAME="apache-spark-ci-image-lint:${{ inputs.branch }}-${{ github.run_id }}"
+        IMG_NAME="perf-apt-wildfire-ci-image-lint:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_lint_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Generate infra image URL (SparkR)
@@ -186,7 +186,7 @@ jobs:
       run: |
         # Convert to lowercase to meet Docker repo name requirement
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-        IMG_NAME="apache-spark-ci-image-sparkr:${{ inputs.branch }}-${{ github.run_id }}"
+        IMG_NAME="perf-apt-wildfire-ci-image-sparkr:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_sparkr_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Generate infra image URL (PySpark ${{ env.PYSPARK_IMAGE_TO_TEST }})
@@ -196,7 +196,7 @@ jobs:
       run: |
         # Convert to lowercase to meet Docker repo name requirement
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-        IMG_NAME="apache-spark-ci-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}:${{ inputs.branch }}-${{ github.run_id }}"
+        IMG_NAME="perf-apt-wildfire-ci-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_pyspark_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Link the docker images
@@ -433,7 +433,7 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
+          cache-from: type=registry,ref=ghcr.io/perf-apt/wildfire/perf-apt-wildfire-github-action-image-cache:${{ inputs.branch }}
       - name: Build and push (Documentation)
         if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).docs == 'true' && hashFiles('dev/spark-test-image/docs/Dockerfile') != '' }}
         id: docker_build_docs
@@ -455,7 +455,7 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_lint_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch }}
+          cache-from: type=registry,ref=ghcr.io/perf-apt/wildfire/perf-apt-wildfire-github-action-image-lint-cache:${{ inputs.branch }}
       - name: Build and push (SparkR)
         if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).sparkr == 'true' && hashFiles('dev/spark-test-image/sparkr/Dockerfile') != '' }}
         id: docker_build_sparkr
@@ -466,7 +466,7 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_sparkr_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }}
+          cache-from: type=registry,ref=ghcr.io/perf-apt/wildfire/perf-apt-wildfire-github-action-image-sparkr-cache:${{ inputs.branch }}
       - name: Build and push (PySpark with ${{ env.PYSPARK_IMAGE_TO_TEST }})
         if: ${{ inputs.branch != 'branch-3.5' && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true') && env.PYSPARK_IMAGE_TO_TEST != '' }}
         id: docker_build_pyspark
@@ -478,7 +478,7 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_pyspark_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}-cache:${{ inputs.branch }}
+          cache-from: type=registry,ref=ghcr.io/perf-apt/wildfire/perf-apt-wildfire-github-action-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}-cache:${{ inputs.branch }}
 
 
   pyspark:
