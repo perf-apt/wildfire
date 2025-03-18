@@ -52,7 +52,7 @@ on:
 jobs:
   precondition:
     name: Check changes
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
