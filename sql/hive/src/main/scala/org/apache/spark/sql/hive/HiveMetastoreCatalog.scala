@@ -269,6 +269,15 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             bucketSpec = hiveBucketSpec,
             fileFormat = fileFormat,
             options = enableDynamicPartition)(sparkSession = sparkSession)
+
+          fileFormat match {
+            case p: ParquetFileFormat =>
+              p.setReadSchema(fsRelation.schema)
+              p.setPartitionSchema(partitionSchema)
+
+            case _ =>
+          }
+
           val created = LogicalRelation(fsRelation, updatedTable)
           catalogProxy.cacheTable(tableIdentifier, created)
           created
