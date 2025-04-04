@@ -661,7 +661,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
 
       assert(logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).contains(
         "Assume no metadata directory. Error while looking for metadata directory in the path:" +
-        s" $path."))
+          s" $path."))
     }
   }
 }

@@ -557,7 +557,7 @@ abstract class InMemoryBaseTable(
     override def hashCode: Int = Objects.hashCode(this.readSchema, this.tableSchema,
       this.allFilters)
 
-    override def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering[Scan]):
+    override def equalToIgnoreRuntimeFilters(other: SupportsBroadcastVarPushdownFiltering):
     Boolean = other match {
       case ims: InMemoryBatchScan => this.readSchema == ims.readSchema &&
         this.tableSchema == ims.tableSchema
