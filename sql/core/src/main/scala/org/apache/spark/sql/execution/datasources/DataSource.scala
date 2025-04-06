@@ -383,7 +383,7 @@ case class DataSource(
             format.toString, fileCatalog.allFiles().mkString(","))
         }
 
-        val relation = HadoopFsRelation(
+        HadoopFsRelation(
           fileCatalog,
           partitionSchema = fileCatalog.partitionSchema,
           dataSchema = dataSchema,
@@ -391,14 +391,6 @@ case class DataSource(
           format,
           caseInsensitiveOptions)(sparkSession)
 
-        format match {
-          case p: ParquetFileFormat =>
-            p.setReadSchema(relation.schema)
-            p.setPartitionSchema(fileCatalog.partitionSchema)
-
-          case _ =>
-        }
-        relation
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
         val useCatalogFileIndex = sparkSession.sessionState.conf.manageFilesourcePartitions &&
@@ -420,22 +412,13 @@ case class DataSource(
           (index, resultDataSchema, resultPartitionSchema)
         }
 
-        val relation = HadoopFsRelation(
+        HadoopFsRelation(
           fileCatalog,
           partitionSchema = partitionSchema,
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
           caseInsensitiveOptions)(sparkSession)
-
-        format match {
-          case p: ParquetFileFormat =>
-            p.setReadSchema(relation.schema)
-            p.setPartitionSchema(partitionSchema)
-
-          case _ =>
-        }
-        relation
 
       case _ =>
         throw QueryCompilationErrors.invalidDataSourceError(className)
