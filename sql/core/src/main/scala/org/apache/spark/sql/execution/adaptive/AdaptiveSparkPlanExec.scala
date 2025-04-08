@@ -338,7 +338,9 @@ case class AdaptiveSparkPlanExec(
       var collectOrphans = OrphanBSCollect.no_collect
       while ((!result.allChildStagesMaterialized ||
         (consecutiveNoDelayedStagesFound < 2 && loopCount > 0)) &&
-        this.currentPhysicalPlan.children.nonEmpty) {
+        this.currentPhysicalPlan.children.nonEmpty &&
+        !(result.allChildStagesMaterialized &&
+          BroadcastHashJoinUtil.getAllBatchScansForSparkPlan(result.newPlan).isEmpty)) {
         ruleContext.clearConfigs()
         if (Utils.isTesting) {
           assertBroadcastPushPresenceInBHJ(result.newPlan)
