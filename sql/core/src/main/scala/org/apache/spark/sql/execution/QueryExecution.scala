@@ -585,7 +585,7 @@ object QueryExecution {
     adaptiveExecutionRule.toSeq ++
     Seq(
       CoalesceBucketsInJoin,
-      BroadcastFilterPushdown,
+      new BroadcastFilterPushdown(subquery),
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
