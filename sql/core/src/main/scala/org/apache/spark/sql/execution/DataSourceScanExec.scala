@@ -656,8 +656,8 @@ case class FileSourceScanExec(
          case _ => false
       })
 
-      if (this.log.isDebugEnabled) {
-        log.debug(s"FileSourceScanExec: comparing two FileSources nonBcProxyVarPart = $boolPart1" +
+      if (this.log.isTraceEnabled()) {
+        log.trace(s"FileSourceScanExec: comparing two FileSources nonBcProxyVarPart = $boolPart1" +
           s"proxyBcVarPart = $boolPart2 ")
       }
 
