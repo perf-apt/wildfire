@@ -653,7 +653,7 @@ case class FileSourceScanExec(
          case (Some(x: BroadcastVarFilterCollector), Some(y: BroadcastVarFilterCollector)) =>
            x.equalToIgnoreRuntimeFilters(y)
 
-         case (None,None) => true
+         case (None, None) => true
 
          case _ => false
       })
