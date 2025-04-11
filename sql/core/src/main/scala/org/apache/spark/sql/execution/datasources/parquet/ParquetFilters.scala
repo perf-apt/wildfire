@@ -897,7 +897,7 @@ object ParquetFilters {
 
   def toLongValue(v: Any): JLong = v match {
     case d: Duration => IntervalUtils.durationToMicros(d)
-    case lt: LocalTime => DateTimeUtils.localTimeToMicros(lt)
+   // case lt: LocalTime => DateTimeUtils.localTimeToMicros(lt)
     case l => l.asInstanceOf[JLong]
   }
 

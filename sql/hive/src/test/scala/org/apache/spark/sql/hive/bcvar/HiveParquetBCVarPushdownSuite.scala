@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive.bcvar
 
 import java.util
 
-import org.scalatest.Ignore
-
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -54,12 +52,10 @@ trait HiveRelationCreator {
     throw new UnsupportedOperationException("not supported")
   }
 
-  /*
+
   class HiveParquetBCVarPushdownSuite
       extends BaseBroadcastVarPushDownTests
       with ParquetTest
       with TestHiveSingleton
-      with HiveRelationCreator */
-
+      with HiveRelationCreator
 }
-
