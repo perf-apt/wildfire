@@ -222,7 +222,8 @@ jobs:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).build == 'true'
-    runs-on: self-hosted
+    runs-on:
+      group: wildfire
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -395,7 +396,8 @@ jobs:
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
       fromJson(needs.precondition.outputs.required).docs == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true'
-    runs-on: self-hosted
+    runs-on:
+      group: wildfire
     permissions:
       packages: write
     steps:
@@ -486,7 +488,8 @@ jobs:
     # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true')
     name: "Build modules: ${{ matrix.modules }}"
-    runs-on: self-hosted
+    runs-on:
+      group: wildfire
     timeout-minutes: 180
     container:
       image: ${{ needs.precondition.outputs.image_pyspark_url_link }}
@@ -649,7 +652,8 @@ jobs:
     # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
-    runs-on: self-hosted
+    runs-on:
+      group: wildfire
     timeout-minutes: 180
     container:
       image: ${{ needs.precondition.outputs.image_sparkr_url_link }}
@@ -723,7 +727,8 @@ jobs:
     needs: [precondition]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).buf == 'true'
     name: Protobuf breaking change detection and Python CodeGen check
-    runs-on: self-hosted
+    runs-on:
+      group: wildfire
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -772,7 +777,8 @@ jobs:
     # always run if lint == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).lint == 'true'
     name: Linters, licenses, and dependencies
-    runs-on: self-hosted
+    runs-on:
+      group: wildfire
     timeout-minutes: 180
     env:
       LC_ALL: C.UTF-8
@@ -903,7 +909,8 @@ jobs:
     # always run if lint == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docs == 'true'
     name: Documentation generation
-    runs-on: self-hosted
+    runs-on:
+      group: wildfire
     timeout-minutes: 180
     env:
       LC_ALL: C.UTF-8
@@ -1128,7 +1135,8 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
-    runs-on: self-hosted
+    runs-on:
+      group: wildfire
     timeout-minutes: 180
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
@@ -1195,7 +1203,8 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
-    runs-on: self-hosted
+    runs-on:
+      group: wildfire
     timeout-minutes: 180
     steps:
       - name: Checkout Spark repository
@@ -1274,7 +1283,8 @@ jobs:
     needs: [precondition]
     if: fromJson(needs.precondition.outputs.required).ui == 'true'
     name: Run Spark UI tests
-    runs-on: self-hosted
+    runs-on:
+      group: wildfire
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
