@@ -266,6 +266,11 @@
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <item_type>"
     ]
   },
+  "DUPLICATED_ARTIFACT": {
+    "message": [
+      "Duplicate Artifact: <normalized_path>. Artifacts cannot be overwritten."
+    ]
+  },
   "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT": {
     "message": [
       "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
@@ -500,6 +505,11 @@
   "MALFORMED_VARIANT" : {
     "message" : [
       "Variant binary is malformed. Please check the data source is valid."
+    ]
+  },
+  "MASTER_URL_INVALID": {
+    "message": [
+      "Master must either be yarn or start with spark, k8s, or local."
     ]
   },
   "MASTER_URL_NOT_SET": {
@@ -800,6 +810,13 @@
   "PACKAGE_NOT_INSTALLED": {
     "message": [
       "<package_name> >= <minimum_version> must be installed; however, it was not found."
+    ]
+  },
+  "PANDAS_API_ON_SPARK_FAIL_ON_ANSI_MODE": {
+    "message": [
+      "Pandas API on Spark does not properly work on ANSI mode.",
+      "Please set a Spark config 'spark.sql.ansi.enabled' to `false`.",
+      "Alternatively set a pandas-on-spark option 'compute.fail_on_ansi_mode' to `False` to force it to work, although it can cause unexpected behavior."
     ]
   },
   "PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS" : {

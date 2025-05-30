@@ -28,6 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{RelationWrapper, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, StagedTable, StagingTableCatalog, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
@@ -104,7 +105,7 @@ private[sql] object DataSourceV2Utils extends Logging {
       userSpecifiedSchema: Option[StructType],
       extraOptions: CaseInsensitiveMap[String],
       source: String,
-      paths: String*): Option[DataFrame] = {
+      paths: String*): Option[LogicalPlan] = {
     val catalogManager = sparkSession.sessionState.catalogManager
     val conf = sparkSession.sessionState.conf
     val sessionOptions = DataSourceV2Utils.extractSessionConfigs(provider, conf)
@@ -150,9 +151,7 @@ private[sql] object DataSourceV2Utils extends Logging {
     implicit val withRelations: Set[RelationWrapper] = Set.empty
     table match {
       case _: SupportsRead if table.supports(BATCH_READ) =>
-        Option(Dataset.ofRows(
-          sparkSession,
-          DataSourceV2Relation.create(table, catalog, ident, dsOptions)))
+        Option(DataSourceV2Relation.create(table, catalog, ident, dsOptions))
       case _ => None
     }
   }

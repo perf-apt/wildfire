@@ -65,7 +65,6 @@ from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 
 from pyspark.sql.utils import (
     to_str as _to_str,
-    has_numpy as _has_numpy,
     try_remote_functions as _try_remote_functions,
     get_active_spark_context as _get_active_spark_context,
     enum_to_value as _enum_to_value,
@@ -79,8 +78,6 @@ if TYPE_CHECKING:
         UserDefinedFunctionLike,
     )
 
-if _has_numpy:
-    import numpy as np
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
 # Namely, if columns are referred as arguments, they can always be both Column or string,
@@ -254,6 +251,8 @@ def lit(col: Any) -> Column:
     |     [true, false]|     []|       [1.5, 0.1]|           [a, b, c]|
     +------------------+-------+-----------------+--------------------+
     """
+    from pyspark.testing.utils import have_numpy
+
     if isinstance(col, Column):
         return col
     elif isinstance(col, list):
@@ -262,7 +261,9 @@ def lit(col: Any) -> Column:
                 errorClass="COLUMN_IN_LIST", messageParameters={"func_name": "lit"}
             )
         return array(*[lit(item) for item in col])
-    elif _has_numpy:
+    elif have_numpy:
+        import numpy as np
+
         if isinstance(col, np.generic):
             dt = _from_numpy_type(col.dtype)
             if dt is None:
@@ -20384,7 +20385,7 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
     `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
@@ -20395,9 +20396,10 @@ def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
-    path : str
-        the extraction path. A valid path should start with `$` and is followed by zero or more
-        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    path : :class:`~pyspark.sql.Column` or str
+        a column containing the extraction path strings or a string representing the extraction
+        path. A valid path should start with `$` and is followed by zero or more segments like
+        `[123]`, `.name`, `['name']`, or `["name"]`.
     targetType : str
         the target data type to cast into, in a DDL-formatted string
 
@@ -20408,21 +20410,29 @@ def variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }''', 'path': '$.a'} ])
     >>> df.select(variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
     [Row(r=1)]
     >>> df.select(variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
     [Row(r=None)]
+    >>> df.select(variant_get(parse_json(df.json), df.path, "int").alias("r")).collect()
+    [Row(r=1)]
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function(
-        "variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
-    )
+    assert isinstance(path, (Column, str))
+    if isinstance(path, str):
+        return _invoke_function(
+            "variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
+        )
+    else:
+        return _invoke_function(
+            "variant_get", _to_java_column(v), _to_java_column(path), _enum_to_value(targetType)
+        )
 
 
 @_try_remote_functions
-def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
+def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
     `targetType`. Returns null if the path does not exist or the cast fails.
@@ -20433,9 +20443,10 @@ def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
-    path : str
-        the extraction path. A valid path should start with `$` and is followed by zero or more
-        segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    path : :class:`~pyspark.sql.Column` or str
+        a column containing the extraction path strings or a string representing the extraction
+        path. A valid path should start with `$` and is followed by zero or more segments like
+        `[123]`, `.name`, `['name']`, or `["name"]`.
     targetType : str
         the target data type to cast into, in a DDL-formatted string
 
@@ -20446,19 +20457,26 @@ def try_variant_get(v: "ColumnOrName", path: str, targetType: str) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }''', 'path': '$.a'} ])
     >>> df.select(try_variant_get(parse_json(df.json), "$.a", "int").alias("r")).collect()
     [Row(r=1)]
     >>> df.select(try_variant_get(parse_json(df.json), "$.b", "int").alias("r")).collect()
     [Row(r=None)]
     >>> df.select(try_variant_get(parse_json(df.json), "$.a", "binary").alias("r")).collect()
     [Row(r=None)]
+    >>> df.select(try_variant_get(parse_json(df.json), df.path, "int").alias("r")).collect()
+    [Row(r=1)]
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function(
-        "try_variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
-    )
+    if isinstance(path, str):
+        return _invoke_function(
+            "try_variant_get", _to_java_column(v), _enum_to_value(path), _enum_to_value(targetType)
+        )
+    else:
+        return _invoke_function(
+            "try_variant_get", _to_java_column(v), _to_java_column(path), _enum_to_value(targetType)
+        )
 
 
 @_try_remote_functions

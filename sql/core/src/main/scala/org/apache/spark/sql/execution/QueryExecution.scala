@@ -29,17 +29,18 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{LazyExpression, MultiInstanceRelation, RelationWrapper, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.analysis.{LazyExpression, MultiInstanceRelation, NameParameterizedQuery, RelationWrapper, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, SkipDedupRelRuleMarker, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, SkipDedupRelRuleMarker, Union}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.QueryExecution.subquery_patterns
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
@@ -50,6 +51,7 @@ import org.apache.spark.sql.execution.joins.BroadcastFilterPushdown
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{LazyTry, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -98,14 +100,24 @@ class QueryExecution(
   }
 
   private val lazyAnalyzed = LazyTry {
+    val withScriptExecuted = logical match {
+      // Execute the SQL script. Script doesn't need to go through the analyzer as Spark will run
+      // each statement as individual query.
+      case NameParameterizedQuery(compoundBody: CompoundBody, argNames, argValues) =>
+        val args = argNames.zip(argValues).toMap
+        SqlScriptingExecution.executeSqlScript(sparkSession, compoundBody, args)
+      case compoundBody: CompoundBody =>
+        SqlScriptingExecution.executeSqlScript(sparkSession, compoundBody)
+      case _ => logical
+    }
     try {
       val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
         // We can't clone `logical` here, which will reset the `_analyzed` flag.
         val skipDedupRule = withRelations.nonEmpty
-        val planToAnalyze = if (skipDedupRule && !logical.analyzed) {
-          SkipDedupRelRuleMarker(logical)
+        val planToAnalyze = if (skipDedupRule && !withScriptExecuted.analyzed) {
+          SkipDedupRelRuleMarker(withScriptExecuted)
         } else {
-          logical
+          withScriptExecuted
         }
         sparkSession.sessionState.analyzer.executeAndCheck(planToAnalyze, tracker)
       }
@@ -113,7 +125,7 @@ class QueryExecution(
       plan
     } catch {
       case NonFatal(e) =>
-        tracker.setAnalysisFailed(logical)
+        tracker.setAnalysisFailed(withScriptExecuted)
         throw e
     }
   }
@@ -355,7 +367,7 @@ class QueryExecution(
       new IncrementalExecution(
         sparkSession, logical, OutputMode.Append(), "<unknown>",
         UUID.randomUUID, UUID.randomUUID, 0, None, OffsetSeqMetadata(0, 0),
-        WatermarkPropagator.noop(), false)
+        WatermarkPropagator.noop(), false, mode = this.mode)
     } else {
       this
     }

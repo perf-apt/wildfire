@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command._

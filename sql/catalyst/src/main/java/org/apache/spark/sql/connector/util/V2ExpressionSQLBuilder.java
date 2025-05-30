@@ -80,7 +80,7 @@ public class V2ExpressionSQLBuilder {
     } else if (expr instanceof Cast cast) {
       return visitCast(build(cast.expression()), cast.expressionDataType(), cast.dataType());
     } else if (expr instanceof Extract extract) {
-      return visitExtract(extract.field(), build(extract.source()));
+      return visitExtract(extract);
     } else if (expr instanceof SortOrder sortOrder) {
       return visitSortOrder(
         build(sortOrder.expression()), sortOrder.direction(), sortOrder.nullOrdering());
@@ -98,7 +98,7 @@ public class V2ExpressionSQLBuilder {
         case "ENDS_WITH" -> visitEndsWith(build(e.children()[0]), build(e.children()[1]));
         case "CONTAINS" -> visitContains(build(e.children()[0]), build(e.children()[1]));
         case "=", "<>", "<=>", "<", "<=", ">", ">=" ->
-          visitBinaryComparison(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
+          visitBinaryComparison(name, e.children()[0], e.children()[1]);
         case "+", "*", "/", "%", "&", "|", "^" ->
           visitBinaryArithmetic(name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
         case "-" -> {
@@ -219,6 +219,10 @@ public class V2ExpressionSQLBuilder {
     }
   }
 
+  protected String visitBinaryComparison(String name, Expression le, Expression re) {
+    return visitBinaryComparison(name, inputToSQL(le), inputToSQL(re));
+  }
+
   protected String visitBinaryComparison(String name, String l, String r) {
     if (name.equals("<=>")) {
       return "((" + l + " IS NOT NULL AND " + r + " IS NOT NULL AND " + l + " = " + r + ") " +
@@ -327,6 +331,10 @@ public class V2ExpressionSQLBuilder {
     } else {
       return "TRIM(" + direction + " " + inputs[1] + " FROM " + inputs[0] + ")";
     }
+  }
+
+  protected String visitExtract(Extract extract) {
+    return visitExtract(extract.field(), build(extract.source()));
   }
 
   protected String visitExtract(String field, String source) {

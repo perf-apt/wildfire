@@ -190,8 +190,10 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * @group expertParam
    */
   @Since("2.2.0")
-  val lowerBoundsOnCoefficients: Param[Matrix] = new Param(this, "lowerBoundsOnCoefficients",
-    "The lower bounds on coefficients if fitting under bound constrained optimization.")
+  val lowerBoundsOnCoefficients: Param[Matrix] = new Param(this.uid, "lowerBoundsOnCoefficients",
+    "The lower bounds on coefficients if fitting under bound constrained optimization.",
+    classOf[Matrix]
+  )
 
   /** @group expertGetParam */
   @Since("2.2.0")
@@ -207,8 +209,10 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * @group expertParam
    */
   @Since("2.2.0")
-  val upperBoundsOnCoefficients: Param[Matrix] = new Param(this, "upperBoundsOnCoefficients",
-    "The upper bounds on coefficients if fitting under bound constrained optimization.")
+  val upperBoundsOnCoefficients: Param[Matrix] = new Param(this.uid, "upperBoundsOnCoefficients",
+    "The upper bounds on coefficients if fitting under bound constrained optimization.",
+    classOf[Matrix]
+  )
 
   /** @group expertGetParam */
   @Since("2.2.0")
@@ -223,8 +227,10 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * @group expertParam
    */
   @Since("2.2.0")
-  val lowerBoundsOnIntercepts: Param[Vector] = new Param(this, "lowerBoundsOnIntercepts",
-    "The lower bounds on intercepts if fitting under bound constrained optimization.")
+  val lowerBoundsOnIntercepts: Param[Vector] = new Param(this.uid, "lowerBoundsOnIntercepts",
+    "The lower bounds on intercepts if fitting under bound constrained optimization.",
+    classOf[Vector]
+  )
 
   /** @group expertGetParam */
   @Since("2.2.0")
@@ -239,8 +245,10 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * @group expertParam
    */
   @Since("2.2.0")
-  val upperBoundsOnIntercepts: Param[Vector] = new Param(this, "upperBoundsOnIntercepts",
-    "The upper bounds on intercepts if fitting under bound constrained optimization.")
+  val upperBoundsOnIntercepts: Param[Vector] = new Param(this.uid, "upperBoundsOnIntercepts",
+    "The upper bounds on intercepts if fitting under bound constrained optimization.",
+    classOf[Vector]
+  )
 
   /** @group expertGetParam */
   @Since("2.2.0")
@@ -1075,6 +1083,9 @@ class LogisticRegressionModel private[spark] (
   private[spark] def this(uid: String, coefficients: Vector, intercept: Double) =
     this(uid, new DenseMatrix(1, coefficients.size, coefficients.toArray, isTransposed = true),
       Vectors.dense(intercept), 2, isMultinomial = false)
+
+  // For ml connect only
+  private[ml] def this() = this("", Matrices.empty, Vectors.empty, -1, false)
 
   /**
    * A vector of model coefficients for "binomial" logistic regression. If this model was trained

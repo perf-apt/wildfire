@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.{expressions => exprs}
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedExtractValue}
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders, Codec, JavaSerializationCodec, KryoSerializationCodec}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders, AgnosticExpressionPathEncoder, Codec, JavaSerializationCodec, KryoSerializationCodec}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedLeafEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, OptionEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, VarcharEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{externalDataTypeFor, isNativeEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField, IsNull, Literal, MapKeys, MapValues, UpCast}
@@ -270,6 +270,8 @@ object DeserializerBuildHelper {
       enc: AgnosticEncoder[_],
       path: Expression,
       walkedTypePath: WalkedTypePath): Expression = enc match {
+    case ae: AgnosticExpressionPathEncoder[_] =>
+      ae.fromCatalyst(path)
     case _ if isNativeEncoder(enc) =>
       path
     case _: BoxedLeafEncoder[_, _] =>
@@ -406,14 +408,20 @@ object DeserializerBuildHelper {
         NewInstance(cls, arguments, Nil, propagateNull = false, dt, outerPointerGetter))
 
     case AgnosticEncoders.RowEncoder(fields) =>
+      val isExternalRow = !path.dataType.isInstanceOf[StructType]
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
         val newTypePath = walkedTypePath.recordField(
           f.enc.clsTag.runtimeClass.getName,
           f.name)
-        exprs.If(
-          Invoke(path, "isNullAt", BooleanType, exprs.Literal(i) :: Nil),
-          exprs.Literal.create(null, externalDataTypeFor(f.enc)),
-          createDeserializer(f.enc, GetStructField(path, i), newTypePath))
+        val deserializer = createDeserializer(f.enc, GetStructField(path, i), newTypePath)
+        if (isExternalRow) {
+          exprs.If(
+            Invoke(path, "isNullAt", BooleanType, exprs.Literal(i) :: Nil),
+            exprs.Literal.create(null, externalDataTypeFor(f.enc)),
+            deserializer)
+        } else {
+          deserializer
+        }
       }
       exprs.If(IsNull(path),
         exprs.Literal.create(null, externalDataTypeFor(enc)),
@@ -441,13 +449,13 @@ object DeserializerBuildHelper {
       val result = InitializeJavaBean(newInstance, setters.toMap)
       exprs.If(IsNull(path), exprs.Literal.create(null, ObjectType(cls)), result)
 
-    case TransformingEncoder(tag, _, codec) if codec == JavaSerializationCodec =>
+    case TransformingEncoder(tag, _, codec, _) if codec == JavaSerializationCodec =>
       DecodeUsingSerializer(path, tag, kryo = false)
 
-    case TransformingEncoder(tag, _, codec) if codec == KryoSerializationCodec =>
+    case TransformingEncoder(tag, _, codec, _) if codec == KryoSerializationCodec =>
       DecodeUsingSerializer(path, tag, kryo = true)
 
-    case TransformingEncoder(tag, encoder, provider) =>
+    case TransformingEncoder(tag, encoder, provider, _) =>
       Invoke(
         Literal.create(provider(), ObjectType(classOf[Codec[_, _]])),
         "decode",

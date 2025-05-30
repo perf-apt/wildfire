@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
 import org.apache.spark.ml.feature.OneHotEncoderModel
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -72,8 +72,8 @@ private[classification] trait MultilayerPerceptronParams extends ProbabilisticCl
    * @group expertParam
    */
   @Since("2.0.0")
-  final val initialWeights: Param[Vector] = new Param[Vector](this, "initialWeights",
-    "The initial weights of the model")
+  final val initialWeights: Param[Vector] = new Param[Vector](this.uid, "initialWeights",
+    "The initial weights of the model", classOf[Vector])
 
   /** @group expertGetParam */
   @Since("2.0.0")
@@ -282,6 +282,9 @@ class MultilayerPerceptronClassificationModel private[ml] (
   extends ProbabilisticClassificationModel[Vector, MultilayerPerceptronClassificationModel]
   with MultilayerPerceptronParams with Serializable with MLWritable
   with HasTrainingSummary[MultilayerPerceptronClassificationTrainingSummary]{
+
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty)
 
   @Since("1.6.0")
   override lazy val numFeatures: Int = $(layers).head

@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat

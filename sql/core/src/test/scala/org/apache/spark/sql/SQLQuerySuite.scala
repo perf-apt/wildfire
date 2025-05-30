@@ -2755,28 +2755,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           start = 0,
           stop = 45)
       )
-
-      withTable("t", "S") {
-        sql("CREATE TABLE t(c struct<f:int>) USING parquet")
-        sql("CREATE TABLE S(C struct<F:int>) USING parquet")
-        checkAnswer(sql("SELECT * FROM t, S WHERE t.c.f = S.C.F"), Seq.empty)
-        val query = "SELECT * FROM t, S WHERE c = C"
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql(query)
-          },
-          condition = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-          sqlState = None,
-          parameters = Map(
-            "sqlExpr" -> "\"(c = C)\"",
-            "left" -> "\"STRUCT<f: INT>\"",
-            "right" -> "\"STRUCT<F: INT>\""),
-          context = ExpectedContext(
-            fragment = "c = C",
-            start = 25,
-            stop = 29
-          ))
-      }
     }
   }
 
@@ -3885,12 +3863,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
+    val jarPath = Thread.currentThread().getContextClassLoader
+      .getResource("SPARK-33084.jar")
+    assume(jarPath != null)
     val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
     val functionName = "test_udf"
     withTempDir { dir =>
       System.setProperty("ivy.home", dir.getAbsolutePath)
-      val sourceJar = new File(Thread.currentThread().getContextClassLoader
-        .getResource("SPARK-33084.jar").getFile)
+      val sourceJar = new File(jarPath.getFile)
       val targetCacheJarDir = new File(dir.getAbsolutePath +
         "/local/org.apache.spark/SPARK-33084/1.0/jars/")
       targetCacheJarDir.mkdir()

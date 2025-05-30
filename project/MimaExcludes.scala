@@ -201,6 +201,34 @@ object MimaExcludes {
 
     // SPARK-50112: Moving avro files from connector to sql/core
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.avro.*"),
+
+    // SPARK-49700: Unified Scala SQL Interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameNaFunctions"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameReader"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameStatFunctions"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.KeyValueGroupedDataset"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLImplicits"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession$Builder"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession$implicits$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.package"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.package$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Catalog"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.DataStreamReader"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.DataStreamWriter"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.DataStreamWriter$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryManager"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQuery"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$implicits$"),
+
+    // SPARK-50768: Introduce TaskContext.createResourceUninterruptibly to avoid stream leak by task interruption
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.interruptible"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.pendingInterrupt"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.createResourceUninterruptibly"),
+
   ) ++ loggingExcludes("org.apache.spark.sql.DataFrameReader") ++
     loggingExcludes("org.apache.spark.sql.streaming.DataStreamReader") ++
     loggingExcludes("org.apache.spark.sql.SparkSession#Builder")
@@ -213,6 +241,7 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.spark_project.jetty.*"),
     ProblemFilters.exclude[Problem]("org.sparkproject.jetty.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.internal.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.kafka010.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.unused.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.unsafe.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.memory.*"),
@@ -223,11 +252,16 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.classic.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connect.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.scripting.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.types.variant.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.ui.flamegraph.*"),
     // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
     // Avro source implementation is internal.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.avro.*"),
+
 
     // SPARK-43169: shaded and generated protobuf code
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
@@ -236,6 +270,9 @@ object MimaExcludes {
     // SPARK-44104: shaded protobuf code and Apis with parameters relocated
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_protobuf.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.utils.SchemaConverters.*"),
+
+    // SPARK-51267: Match local Spark Connect server logic between Python and Scala
+    ProblemFilters.exclude[MissingFieldProblem]("org.apache.spark.launcher.SparkLauncher.SPARK_LOCAL_REMOTE"),
 
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&

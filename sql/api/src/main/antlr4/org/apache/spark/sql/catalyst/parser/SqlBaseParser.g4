@@ -48,11 +48,11 @@ compoundOrSingleStatement
     ;
 
 singleCompoundStatement
-    : BEGIN compoundBody? END SEMICOLON? EOF
+    : BEGIN (NOT ATOMIC)? compoundBody? END SEMICOLON? EOF
     ;
 
 beginEndCompoundBlock
-    : beginLabel? BEGIN compoundBody? END endLabel?
+    : beginLabel? BEGIN (NOT ATOMIC)? compoundBody? END endLabel?
     ;
 
 compoundBody
@@ -60,9 +60,11 @@ compoundBody
     ;
 
 compoundStatement
-    : statement
-    | setStatementWithOptionalVarKeyword
+    : declareConditionStatement
+    | statement
+    | setStatementInsideSqlScript
     | beginEndCompoundBlock
+    | declareHandlerStatement
     | ifElseStatement
     | caseStatement
     | whileStatement
@@ -73,10 +75,33 @@ compoundStatement
     | forStatement
     ;
 
-setStatementWithOptionalVarKeyword
-    : SET variable? assignmentList                              #setVariableWithOptionalKeyword
-    | SET variable? LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
-        LEFT_PAREN query RIGHT_PAREN                            #setVariableWithOptionalKeyword
+setStatementInsideSqlScript
+    : SET assignmentList                              #setVariableInsideSqlScript
+    | SET LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
+        LEFT_PAREN query RIGHT_PAREN                  #setVariableInsideSqlScript
+    ;
+
+sqlStateValue
+    : stringLit
+    ;
+
+declareConditionStatement
+    : DECLARE multipartIdentifier CONDITION (FOR SQLSTATE VALUE? sqlStateValue)?
+    ;
+
+conditionValue
+    : SQLSTATE VALUE? sqlStateValue
+    | SQLEXCEPTION
+    | NOT FOUND
+    | multipartIdentifier
+    ;
+
+conditionValues
+    : cvList+=conditionValue (COMMA cvList+=conditionValue)*
+    ;
+
+declareHandlerStatement
+    : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (beginEndCompoundBlock | statement | setStatementInsideSqlScript)
     ;
 
 whileStatement
@@ -85,7 +110,7 @@ whileStatement
 
 ifElseStatement
     : IF booleanExpression THEN conditionalBodies+=compoundBody
-        (ELSE IF booleanExpression THEN conditionalBodies+=compoundBody)*
+        (ELSEIF booleanExpression THEN conditionalBodies+=compoundBody)*
         (ELSE elseBody=compoundBody)? END IF
     ;
 
@@ -152,6 +177,10 @@ singleTableSchema
     : colTypeList EOF
     ;
 
+singleRoutineParamList
+    : colDefinitionList EOF
+    ;
+
 statement
     : query                                                            #statementDefault
     | executeImmediate                                                 #visitExecuteImmediate
@@ -212,8 +241,7 @@ statement
     | ALTER (TABLE | VIEW) identifierReference
         UNSET TBLPROPERTIES (IF EXISTS)? propertyList                  #unsetTableProperties
     | ALTER TABLE table=identifierReference
-        (ALTER | CHANGE) COLUMN? column=multipartIdentifier
-        alterColumnAction?                                             #alterTableAlterColumn
+        (ALTER | CHANGE) COLUMN? columns=alterColumnSpecList           #alterTableAlterColumn
     | ALTER TABLE table=identifierReference partitionSpec?
         CHANGE COLUMN?
         colName=multipartIdentifier colType colPosition?               #hiveChangeColumn
@@ -318,8 +346,7 @@ statement
     ;
 
 setResetStatement
-    : SET COLLATION collationName=identifier                           #setCollation
-    | SET ROLE .*?                                                     #failSetRole
+    : SET ROLE .*?                                                     #failSetRole
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
@@ -450,6 +477,10 @@ schemaBinding
 
 commentSpec
     : COMMENT stringLit
+    ;
+
+singleQuery
+    : query EOF
     ;
 
 query
@@ -1489,6 +1520,14 @@ number
     | MINUS? BIGDECIMAL_LITERAL       #bigDecimalLiteral
     ;
 
+alterColumnSpecList
+    : alterColumnSpec (COMMA alterColumnSpec)*
+    ;
+
+alterColumnSpec
+    : column=multipartIdentifier alterColumnAction?
+    ;
+
 alterColumnAction
     : TYPE dataType
     | commentSpec
@@ -1568,6 +1607,7 @@ ansiNonReserved
     | ARRAY
     | ASC
     | AT
+    | ATOMIC
     | BEGIN
     | BETWEEN
     | BIGINT
@@ -1600,7 +1640,9 @@ ansiNonReserved
     | COMPENSATION
     | COMPUTE
     | CONCATENATE
+    | CONDITION
     | CONTAINS
+    | CONTINUE
     | COST
     | CUBE
     | CURRENT
@@ -1635,11 +1677,13 @@ ansiNonReserved
     | DO
     | DOUBLE
     | DROP
+    | ELSEIF
     | ESCAPED
     | EVOLUTION
     | EXCHANGE
     | EXCLUDE
     | EXISTS
+    | EXIT
     | EXPLAIN
     | EXPORT
     | EXTEND
@@ -1653,11 +1697,13 @@ ansiNonReserved
     | FOLLOWING
     | FORMAT
     | FORMATTED
+    | FOUND
     | FUNCTION
     | FUNCTIONS
     | GENERATED
     | GLOBAL
     | GROUPING
+    | HANDLER
     | HOUR
     | HOURS
     | IDENTIFIER_KW
@@ -1790,6 +1836,8 @@ ansiNonReserved
     | SORTED
     | SOURCE
     | SPECIFIC
+    | SQLEXCEPTION
+    | SQLSTATE
     | START
     | STATISTICS
     | STORED
@@ -1832,6 +1880,7 @@ ansiNonReserved
     | UNTIL
     | UPDATE
     | USE
+    | VALUE
     | VALUES
     | VARCHAR
     | VAR
@@ -1896,6 +1945,7 @@ nonReserved
     | AS
     | ASC
     | AT
+    | ATOMIC
     | AUTHORIZATION
     | BEGIN
     | BETWEEN
@@ -1937,8 +1987,10 @@ nonReserved
     | COMPENSATION
     | COMPUTE
     | CONCATENATE
+    | CONDITION
     | CONSTRAINT
     | CONTAINS
+    | CONTINUE
     | COST
     | CREATE
     | CUBE
@@ -1980,6 +2032,7 @@ nonReserved
     | DOUBLE
     | DROP
     | ELSE
+    | ELSEIF
     | END
     | ESCAPE
     | ESCAPED
@@ -1988,6 +2041,7 @@ nonReserved
     | EXCLUDE
     | EXECUTE
     | EXISTS
+    | EXIT
     | EXPLAIN
     | EXPORT
     | EXTEND
@@ -2007,6 +2061,7 @@ nonReserved
     | FORMAT
     | FORMATTED
     | FROM
+    | FOUND
     | FUNCTION
     | FUNCTIONS
     | GENERATED
@@ -2014,6 +2069,7 @@ nonReserved
     | GRANT
     | GROUP
     | GROUPING
+    | HANDLER
     | HAVING
     | HOUR
     | HOURS
@@ -2165,6 +2221,8 @@ nonReserved
     | SOURCE
     | SPECIFIC
     | SQL
+    | SQLEXCEPTION
+    | SQLSTATE
     | START
     | STATISTICS
     | STORED
@@ -2215,6 +2273,7 @@ nonReserved
     | UPDATE
     | USE
     | USER
+    | VALUE
     | VALUES
     | VARCHAR
     | VAR

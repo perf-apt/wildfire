@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, IgnoreCachedData, LeafNode, LogicalPlan, Project, ResolvedHint, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.analysis.EarlyCollapseProject
 import org.apache.spark.sql.execution.columnar.InMemoryRelation

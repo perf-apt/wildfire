@@ -141,7 +141,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ADD COLUMNS (C4 STRING)")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("SPARK-33034: ALTER TABLE ... drop column") {
@@ -170,7 +174,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table DROP COLUMN C1")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("SPARK-33034: ALTER TABLE ... update column type") {
@@ -193,7 +201,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN id TYPE DOUBLE")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("SPARK-33034: ALTER TABLE ... rename column") {
@@ -221,7 +233,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table RENAME COLUMN ID TO C")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("SPARK-33034: ALTER TABLE ... update column nullability") {
@@ -232,7 +248,11 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     val e = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.not_existing_table ALTER COLUMN ID DROP NOT NULL")
     }
-    checkErrorFailedJDBC(e, "FAILED_JDBC.LOAD_TABLE", "not_existing_table")
+    checkErrorTableNotFound(
+      e,
+      s"`$catalogName`.`not_existing_table`",
+      ExpectedContext(
+        s"$catalogName.not_existing_table", 12, 11 + s"$catalogName.not_existing_table".length))
   }
 
   test("CREATE TABLE with table comment") {
@@ -985,5 +1005,42 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   test("scan with filter push-down with date time functions") {
     testDatetime(s"$catalogAndNamespace.${caseConvert("datetime")}")
+  }
+
+  test("SPARK-50792: Format binary data as a binary literal in JDBC.") {
+    val tableName = s"$catalogName.test_binary_literal"
+    withTable(tableName) {
+      // Create a table with binary column
+      val binary = "X'123456'"
+      val lessThanBinary = "X'123455'"
+      val greaterThanBinary = "X'123457'"
+
+      sql(s"CREATE TABLE $tableName (binary_col BINARY)")
+      sql(s"INSERT INTO $tableName VALUES ($binary)")
+
+      def testBinaryLiteral(operator: String, literal: String, expected: Int): Unit = {
+        val sql = s"SELECT * FROM $tableName WHERE binary_col $operator $literal"
+        val df = spark.sql(sql)
+        checkFilterPushed(df)
+        val rows = df.collect()
+        assert(rows.length === expected, s"Failed to run $sql")
+        if (expected == 1) {
+          assert(rows(0)(0) === Array(0x12, 0x34, 0x56).map(_.toByte))
+        }
+      }
+
+      testBinaryLiteral("=", binary, 1)
+      testBinaryLiteral(">=", binary, 1)
+      testBinaryLiteral(">=", lessThanBinary, 1)
+      testBinaryLiteral(">", lessThanBinary, 1)
+      testBinaryLiteral("<=", binary, 1)
+      testBinaryLiteral("<=", greaterThanBinary, 1)
+      testBinaryLiteral("<", greaterThanBinary, 1)
+      testBinaryLiteral("<>", greaterThanBinary, 1)
+      testBinaryLiteral("<>", lessThanBinary, 1)
+      testBinaryLiteral("<=>", binary, 1)
+      testBinaryLiteral("<=>", lessThanBinary, 0)
+      testBinaryLiteral("<=>", greaterThanBinary, 0)
+    }
   }
 }

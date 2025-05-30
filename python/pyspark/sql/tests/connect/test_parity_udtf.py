@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import unittest
 
 from pyspark.testing.connectutils import should_test_connect
@@ -26,7 +27,11 @@ if should_test_connect:
 
     sql.udtf.UserDefinedTableFunction = UserDefinedTableFunction
     from pyspark.sql.connect.functions import lit, udtf
-    from pyspark.errors.exceptions.connect import SparkConnectGrpcException, PythonException
+    from pyspark.errors.exceptions.connect import (
+        PickleException,
+        PythonException,
+        InvalidPlanInput,
+    )
 
 
 class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
@@ -42,10 +47,8 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
         finally:
             super(UDTFParityTests, cls).tearDownClass()
 
-    # TODO: use PySpark error classes instead of SparkConnectGrpcException
-
     def test_struct_output_type_casting_row(self):
-        self.check_struct_output_type_casting_row(SparkConnectGrpcException)
+        self.check_struct_output_type_casting_row(PickleException)
 
     def test_udtf_with_invalid_return_type(self):
         @udtf(returnType="int")
@@ -54,7 +57,7 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
                 yield a + 1,
 
         with self.assertRaisesRegex(
-            SparkConnectGrpcException, "Invalid Python user-defined table function return type."
+            InvalidPlanInput, "Invalid Python user-defined table function return type."
         ):
             TestUDTF(lit(1)).collect()
 
@@ -76,14 +79,6 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
     def test_udtf_access_spark_session(self):
         super().test_udtf_access_spark_session()
 
-    @unittest.skip("TODO(SPARK-50393): support df.asTable() in Spark Connect")
-    def test_df_asTable(self):
-        super().test_df_asTable()
-
-    @unittest.skip("TODO(SPARK-50393): support df.asTable() in Spark Connect")
-    def test_df_asTable_chaining_methods(self):
-        super().test_df_asTable_chaining_methods()
-
     def _add_pyfile(self, path):
         self.spark.addArtifacts(path, pyfile=True)
 
@@ -94,6 +89,10 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
         self.spark.addArtifacts(path, file=True)
 
 
+@unittest.skipIf(
+    os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1",
+    "Python UDTF with Arrow is still under development.",
+)
 class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):
     @classmethod
     def setUpClass(cls):
