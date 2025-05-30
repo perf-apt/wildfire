@@ -708,11 +708,11 @@ class Dataset[T] private[sql](
         this.queryExecution.getCombinedRelations(right.queryExecution))
       .queryExecution.analyzed.asInstanceOf[Join]
 
-    val leftTagIdMap = planPart1.left.getTagValue(DATASET_ID_TAG)
-    val rightTagIdMap = planPart1.right.getTagValue(DATASET_ID_TAG)
+    val leftTagIdMap = planPart1.left.getTagValue(Dataset.DATASET_ID_TAG)
+    val rightTagIdMap = planPart1.right.getTagValue(Dataset.DATASET_ID_TAG)
 
     val joinExprsRectified = joinExprs.map(_.expr transformUp {
-      case attr: AttributeReference if attr.metadata.contains(DATASET_ID_KEY) =>
+      case attr: AttributeReference if attr.metadata.contains(Dataset.DATASET_ID_KEY) =>
         // For attribute to remain attribute and not to UnResolved, only one leg should be tru
         val leftLegWrong = isIncorrectlyResolved(attr, planPart1.left.outputSet,
           leftTagIdMap.getOrElse(HashSet.empty[Long]))
@@ -958,7 +958,7 @@ class Dataset[T] private[sql](
     }
     val namedExprs = untypedCols.map(ne => (ne.named transformUp {
       case attr: AttributeReference if inputForProjOpt.isDefined &&
-        attr.metadata.contains(DATASET_ID_KEY) &&
+        attr.metadata.contains(Dataset.DATASET_ID_KEY) &&
         (!inputForProjOpt.get.contains(attr) ||
           isIncorrectlyResolved(attr, inputForProjOpt.get, HashSet(id))) =>
         val ua = UnresolvedAttribute(Seq(attr.name))
@@ -1808,8 +1808,8 @@ class Dataset[T] private[sql](
       attr: AttributeReference,
       input: AttributeSet,
       dataSetIdOfInput: HashSet[Long]): Boolean = {
-    val attrDatasetIdOpt = if (attr.metadata.contains(DATASET_ID_KEY)) {
-      Option(attr.metadata.getLong(DATASET_ID_KEY))
+    val attrDatasetIdOpt = if (attr.metadata.contains(Dataset.DATASET_ID_KEY)) {
+      Option(attr.metadata.getLong(Dataset.DATASET_ID_KEY))
     } else {
       None
     }
@@ -1819,8 +1819,8 @@ class Dataset[T] private[sql](
         true
       } else {
         matchingInputset.forall(x => {
-          if (x.metadata.contains(DATASET_ID_KEY)) {
-            attrId != x.metadata.getLong(DATASET_ID_KEY)
+          if (x.metadata.contains(Dataset.DATASET_ID_KEY)) {
+            attrId != x.metadata.getLong(Dataset.DATASET_ID_KEY)
           } else {
             !dataSetIdOfInput.contains(attrId)
           }

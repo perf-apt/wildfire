@@ -23,7 +23,6 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.{LogEntry, Logging, MDC}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, SubqueryExpression}

@@ -838,6 +838,9 @@ case class AdaptiveSparkPlanExec(
   private def createQueryStages(
       resultHandler: SparkPlan => Any,
       plan: SparkPlan,
+      stageIdToBuildsideJoinKeys: mutable.Map[Int, TupleBuildLpProxyVarCanonBuildKeys],
+      orphanBSCollect: OrphanBSCollect,
+      hasStreamSidePushdownDependent: Boolean = false,
       firstRun: Boolean): CreateStageResult = {
     plan match {
       // 1. ResultQueryStageExec is already created, no need to create non-result stages

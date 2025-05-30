@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution.analysis
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.analysis.{SQLFunctionExpression, SQLScalarFunction}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Expression, NamedExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder}
 import org.apache.spark.util.Utils
 

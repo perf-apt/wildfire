@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes

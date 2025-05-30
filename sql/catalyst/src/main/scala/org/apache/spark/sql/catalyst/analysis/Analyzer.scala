@@ -217,7 +217,7 @@ object AnalysisContext {
       viewDesc.viewReferredTempViewNames,
       mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
       viewDesc.viewReferredTempVariableNames,
-      skipDedupRelations = originContext.skipDedupRelation,
+      skipDedupRelations = originContext.skipDedupRelations,
       isExecuteImmediate = originContext.isExecuteImmediate,
       collation = viewDesc.collation)
     set(context)

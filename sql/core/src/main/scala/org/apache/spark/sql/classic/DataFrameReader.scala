@@ -107,7 +107,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     Dataset.ofRows(
       sparkSession,
       UnresolvedDataSource(source, userSpecifiedSchema, extraOptions, isStreaming = false, paths)
-    )
+    )(Set.empty)
   }
 
   /** @inheritdoc */
