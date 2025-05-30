@@ -249,6 +249,8 @@ trait FileSourceScanLike extends DataSourceScanExec {
   // Identifier for the table in the metastore.
   def tableIdentifier: Option[TableIdentifier]
 
+  def proxyForPushedBroadcastVar: Option[Seq[ProxyBroadcastVarAndStageIdentifier]]
+  def broadcastVarCollector: Option[BroadcastVarFilterCollector]
 
   lazy val fileConstantMetadataColumns: Seq[AttributeReference] = output.collect {
     // Collect metadata columns to be handled outside of the scan by appending constant columns.
@@ -453,7 +455,12 @@ trait FileSourceScanLike extends DataSourceScanExec {
         "PartitionFilters" -> seqToString(partitionFilters),
         "PushedFilters" -> seqToString(pushedFiltersForDisplay),
         "DataFilters" -> seqToString(dataFilters),
-        "Location" -> locationDesc)
+        "Location" -> locationDesc,
+        "proxyForPushedBroadcastVar" -> proxyForPushedBroadcastVar.map(_.mkString(",")).
+          getOrElse(""),
+        "broadcastVarCollector" -> broadcastVarCollector.map(
+          _.broadcastVarFilterExpressions.mkString(",")).getOrElse("")
+      )
 
     relation.bucketSpec.map { spec =>
       val bucketedKey = "Bucketed"
