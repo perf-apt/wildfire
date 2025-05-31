@@ -37,7 +37,7 @@ import org.apache.spark.ml.recommendation._
 import org.apache.spark.ml.regression._
 import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, Identifiable, MLWritable}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter

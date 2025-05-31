@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.classic.Dataset

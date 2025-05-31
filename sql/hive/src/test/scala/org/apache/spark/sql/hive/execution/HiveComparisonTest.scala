@@ -27,7 +27,6 @@ import scala.util.control.NonFatal
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.analysis.RelationWrapper
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._

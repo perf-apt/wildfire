@@ -28,7 +28,7 @@ import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession, TestSQLS
 class DeduplicateRelationsRuleSkipTest extends QueryTest with SharedSparkSession {
   import testImplicits._
   override protected def createSparkSession: TestSparkSession = {
-    SparkSession.cleanupAnyExistingSession()
+    classic.SparkSession.cleanupAnyExistingSession()
     new CustomRuleTestSession(sparkConf)
   }
 
@@ -276,8 +276,9 @@ class CustomRuleTestSession(sparkConf: SparkConf) extends TestSparkSession(spark
   }
 }
 
-class CustomRuleTestSQLSessionStateBuilder(session: SparkSession, state: Option[SessionState])
-  extends TestSQLSessionStateBuilder(session, state) {
+class CustomRuleTestSQLSessionStateBuilder(
+    session: classic.SparkSession,
+    state: Option[SessionState]) extends TestSQLSessionStateBuilder(session, state) {
   override def newBuilder: NewBuilder = new CustomRuleTestSQLSessionStateBuilder(_, _)
 
   override protected def customResolutionRules: Seq[Rule[LogicalPlan]] = {
